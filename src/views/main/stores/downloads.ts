@@ -1,0 +1,99 @@
+import { createStore, createEvent, createEffect, combine } from 'effector';
+import { rpc } from '../rpc';
+import type { DownloadItem, AddDownloadParams } from '../../../shared/types';
+
+export type FilterType = 'all' | 'active' | 'done' | 'error';
+export type AddPhase = 'idle' | 'fetching' | 'error';
+
+// ── Events ────────────────────────────────────────────────────────────────────
+export const stateReceived = createEvent<DownloadItem[]>();
+export const downloadAdded = createEvent<DownloadItem>();
+export const downloadUpdated = createEvent<DownloadItem>();
+export const downloadRemoved = createEvent<string>();
+export const filterChanged = createEvent<FilterType>();
+export const rowToggled = createEvent<string>();
+export const addPhaseSet = createEvent<{ phase: AddPhase; message?: string }>();
+
+// ── Effects ───────────────────────────────────────────────────────────────────
+export const addDownloadFx = createEffect(async (params: AddDownloadParams) => {
+  return rpc.proxy.request['download:add'](params);
+});
+
+export const removeDownloadFx = createEffect((id: string) => {
+  return rpc.proxy.request['download:remove']({ id });
+});
+
+export const removeTrackFx = createEffect(({ downloadId, trackId }: { downloadId: string; trackId: string }) => {
+  return rpc.proxy.request['track:remove']({ downloadId, trackId });
+});
+
+export const redownloadFx = createEffect((id: string) => {
+  return rpc.proxy.request['download:redownload']({ id });
+});
+
+export const retryAllFailedFx = createEffect(() => {
+  return rpc.proxy.request['downloads:retryFailed'](undefined as any);
+});
+
+export const loadAllFx = createEffect(async () => {
+  return rpc.proxy.request['downloads:getAll'](undefined as any);
+});
+
+// ── Stores ────────────────────────────────────────────────────────────────────
+export const $downloads = createStore<DownloadItem[]>([])
+  .on(stateReceived, (_, items) => items)
+  .on(downloadAdded, (items, item) => [item, ...items])
+  .on(downloadUpdated, (items, updated) =>
+    items.map((i) => (i.id === updated.id ? updated : i))
+  )
+  .on(downloadRemoved, (items, id) => items.filter((i) => i.id !== id))
+  .on(loadAllFx.doneData, (_, items) => (items ? items : []));
+
+export const $filter = createStore<FilterType>('all').on(filterChanged, (_, f) => f);
+
+export const $expandedRows = createStore<Set<string>>(new Set()).on(
+  rowToggled,
+  (set, id) => {
+    const next = new Set(set);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  }
+);
+
+export const $addStatus = createStore<{ phase: AddPhase; message?: string }>({ phase: 'idle' })
+  .on(addPhaseSet, (_, s) => s)
+  .on(addDownloadFx, () => ({ phase: 'fetching' }))
+  .on(addDownloadFx.done, () => ({ phase: 'idle' }))
+  .on(addDownloadFx.fail, (_, { error }) => ({
+    phase: 'error',
+    message: (error as Error).message,
+  }));
+
+export const $filteredDownloads = combine($downloads, $filter, (downloads, filter) => {
+  if (filter === 'all') return downloads;
+  if (filter === 'active') return downloads.filter((d) => ['fetching', 'queued', 'active'].includes(d.status));
+  if (filter === 'done') return downloads.filter((d) => d.status === 'done');
+  if (filter === 'error') return downloads.filter((d) => d.status === 'error');
+  return downloads;
+});
+
+export const $stats = $downloads.map((ds) => ({
+  total: ds.length,
+  active: ds.filter((d) => ['fetching', 'queued', 'active'].includes(d.status)).length,
+  done: ds.filter((d) => d.status === 'done').length,
+  error: ds.filter((d) => d.status === 'error').length,
+  failedTracks: ds.reduce((s, d) => s + d.failedTracks, 0),
+  totalSpeed: ds.reduce((s, d) => s + (d.speed ?? 0), 0),
+}));
+
+// ── RPC bindings ──────────────────────────────────────────────────────────────
+rpc.addMessageListener('downloads:state', (items) => stateReceived(items));
+rpc.addMessageListener('download:added', (item) => {
+  downloadAdded(item);
+  addPhaseSet({ phase: 'idle' });
+});
+rpc.addMessageListener('download:updated', (item) => downloadUpdated(item));
+rpc.addMessageListener('download:removed', (id) => downloadRemoved(id));
+rpc.addMessageListener('download:fetching', () => addPhaseSet({ phase: 'fetching' }));
+rpc.addMessageListener('download:fetch_done', () => addPhaseSet({ phase: 'idle' }));
+rpc.addMessageListener('download:error', ({ message }) => addPhaseSet({ phase: 'error', message }));

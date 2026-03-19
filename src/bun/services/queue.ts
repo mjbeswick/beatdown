@@ -1,0 +1,355 @@
+import { EventEmitter } from 'events';
+import * as fs from 'fs';
+import { v4 as uuidv4 } from 'uuid';
+import type {
+  AudioFormat,
+  DownloadItem,
+  DownloadStatus,
+  QualityPreset,
+  SpotifyContent,
+  TrackInfo,
+  TrackStatus,
+} from '../../shared/types';
+import {
+  downloadTrack,
+  findExistingTrack,
+  getArtistDir,
+  type DownloadProgress,
+} from './downloader';
+import { logger } from '../logger';
+import { savePlaylist, deletePlaylist, loadAllPlaylists } from './playlist';
+
+const CONCURRENCY = 3;
+const MAX_RETRIES = 2;
+const RETRY_DELAYS_MS = [2000, 8000];
+
+export class DownloadQueue extends EventEmitter {
+  private items = new Map<string, DownloadItem>();
+  private abortControllers = new Map<string, AbortController>();
+  private activeCount = 0;
+  private pendingTracks: Array<{ downloadId: string; track: TrackInfo; attempt: number }> = [];
+
+  getAll(): DownloadItem[] {
+    return [...this.items.values()].sort(
+      (a, b) => new Date(b.addedAt).getTime() - new Date(a.addedAt).getTime()
+    );
+  }
+
+  get(id: string): DownloadItem | undefined {
+    return this.items.get(id);
+  }
+
+  loadFromDisk(): void {
+    try {
+      const loaded = loadAllPlaylists();
+      for (const item of loaded) {
+        this.items.set(item.id, item);
+      }
+      logger.info(`Loaded ${loaded.length} playlist(s) from disk`);
+    } catch (err) {
+      logger.error('Failed to load playlists from disk', (err as Error).message);
+    }
+  }
+
+  async add(
+    content: SpotifyContent,
+    url: string,
+    format: AudioFormat,
+    quality: QualityPreset
+  ): Promise<DownloadItem> {
+    const id = uuidv4();
+
+    const tracks: TrackInfo[] = content.tracks.map((t, i) => ({
+      id: uuidv4(),
+      index: i,
+      title: t.title,
+      artist: t.artist,
+      status: 'queued' as TrackStatus,
+      progress: 0,
+    }));
+
+    const item: DownloadItem = {
+      id,
+      url,
+      name: content.name,
+      type: content.type,
+      coverArt: content.coverArt,
+      tracks,
+      status: 'queued',
+      progress: 0,
+      totalTracks: tracks.length,
+      completedTracks: 0,
+      failedTracks: 0,
+      addedAt: new Date().toISOString(),
+      format,
+      quality,
+      outputDir: '',
+    };
+
+    this.items.set(id, item);
+    this.emit('download:added', { ...item, tracks: tracks.map((t) => ({ ...t })) });
+    savePlaylist(item);
+    logger.info(`Added "${content.name}" (${tracks.length} tracks) [${format}/${quality}]`);
+
+    for (const track of tracks) {
+      this.pendingTracks.push({ downloadId: id, track, attempt: 0 });
+    }
+    this.drain();
+
+    return item;
+  }
+
+  remove(id: string): void {
+    const controller = this.abortControllers.get(id);
+    if (controller) {
+      controller.abort();
+      this.abortControllers.delete(id);
+    }
+    this.pendingTracks = this.pendingTracks.filter((p) => p.downloadId !== id);
+
+    const item = this.items.get(id);
+    if (item) {
+      deletePlaylist(item);
+      // Note: we do NOT delete audio files from the Library — they may be shared
+    }
+
+    this.items.delete(id);
+    this.emit('download:removed', id);
+  }
+
+  removeTrack(downloadId: string, trackId: string): void {
+    const item = this.items.get(downloadId);
+    if (!item) return;
+    const track = item.tracks.find((t) => t.id === trackId);
+    if (!track) return;
+
+    this.pendingTracks = this.pendingTracks.filter(
+      (p) => !(p.downloadId === downloadId && p.track.id === trackId)
+    );
+
+    item.tracks = item.tracks.filter((t) => t.id !== trackId);
+
+    if (item.tracks.length === 0) {
+      this.remove(downloadId);
+      return;
+    }
+
+    this.recalculate(item);
+    savePlaylist(item);
+  }
+
+  redownload(id: string): void {
+    const item = this.items.get(id);
+    if (!item) return;
+
+    const controller = this.abortControllers.get(id);
+    if (controller) {
+      controller.abort();
+      this.abortControllers.delete(id);
+    }
+    this.pendingTracks = this.pendingTracks.filter((p) => p.downloadId !== id);
+
+    for (const track of item.tracks) {
+      track.status = 'queued';
+      track.progress = 0;
+      track.speed = undefined;
+      track.eta = undefined;
+      track.error = undefined;
+      track.filePath = undefined;
+    }
+
+    item.status = 'queued';
+    item.progress = 0;
+    item.completedTracks = 0;
+    item.failedTracks = 0;
+    item.completedAt = undefined;
+
+    this.emit('download:updated', { ...item, tracks: item.tracks.map((t) => ({ ...t })) });
+
+    for (const track of item.tracks) {
+      this.pendingTracks.push({ downloadId: id, track, attempt: 0 });
+    }
+    this.drain();
+    savePlaylist(item);
+  }
+
+  retryAllFailed(): void {
+    for (const item of this.items.values()) {
+      const failedTracks = item.tracks.filter((t) => t.status === 'error');
+      if (failedTracks.length === 0) continue;
+
+      for (const track of failedTracks) {
+        track.status = 'queued';
+        track.progress = 0;
+        track.error = undefined;
+        this.pendingTracks.push({ downloadId: item.id, track, attempt: 0 });
+      }
+
+      this.recalculate(item);
+      savePlaylist(item);
+    }
+    this.drain();
+  }
+
+  private mutateTrack(
+    downloadId: string,
+    trackId: string,
+    changes: Partial<TrackInfo>
+  ): void {
+    const item = this.items.get(downloadId);
+    if (!item) return;
+    const track = item.tracks.find((t) => t.id === trackId);
+    if (!track) return;
+    Object.assign(track, changes);
+    this.recalculate(item);
+    if (changes.status === 'done' || changes.status === 'error') {
+      savePlaylist(item);
+    }
+  }
+
+  private recalculate(item: DownloadItem): void {
+    const totalTracks = item.tracks.length;
+    item.totalTracks = totalTracks;
+
+    const done = item.tracks.filter((t) => t.status === 'done').length;
+    const failed = item.tracks.filter((t) => t.status === 'error').length;
+    const finished = done + failed;
+    const activeProgress = item.tracks
+      .filter((t) => t.status === 'downloading' || t.status === 'converting')
+      .reduce((s, t) => s + t.progress, 0);
+
+    item.completedTracks = done;
+    item.failedTracks = failed;
+    item.progress =
+      totalTracks > 0
+        ? Math.min(Math.round(((finished * 100 + activeProgress) / totalTracks)), 100)
+        : 0;
+    item.speed = item.tracks
+      .filter((t) => t.status === 'downloading')
+      .reduce((s, t) => s + (t.speed ?? 0), 0);
+
+    if (finished === totalTracks && totalTracks > 0) {
+      item.status = (failed === totalTracks ? 'error' : 'done') as DownloadStatus;
+      item.completedAt = new Date().toISOString();
+    } else if (item.tracks.some((t) => t.status === 'downloading' || t.status === 'converting')) {
+      item.status = 'active';
+    } else if (item.status !== 'queued') {
+      item.status = 'active';
+    }
+
+    this.emit('download:updated', { ...item, tracks: item.tracks.map((t) => ({ ...t })) });
+  }
+
+  private drain(): void {
+    while (this.activeCount < CONCURRENCY && this.pendingTracks.length > 0) {
+      const next = this.pendingTracks.shift()!;
+      this.runTrack(next.downloadId, next.track, next.attempt);
+    }
+  }
+
+  private async runTrack(downloadId: string, track: TrackInfo, attempt: number): Promise<void> {
+    const item = this.items.get(downloadId);
+    if (!item) return;
+
+    this.activeCount++;
+
+    if (!this.abortControllers.has(downloadId)) {
+      this.abortControllers.set(downloadId, new AbortController());
+    }
+    const signal = this.abortControllers.get(downloadId)!.signal;
+
+    if (signal.aborted) {
+      this.activeCount--;
+      this.drain();
+      return;
+    }
+
+    // --- Dedup: check if this track already exists in the Library ---
+    const existing = findExistingTrack(track.artist, track.title);
+    if (existing && fs.existsSync(existing)) {
+      logger.info(`Dedup hit: "${track.title}" → ${existing}`);
+      this.mutateTrack(downloadId, track.id, {
+        status: 'done',
+        progress: 100,
+        filePath: existing,
+        speed: undefined,
+        eta: undefined,
+      });
+      this.activeCount--;
+      this.drain();
+      return;
+    }
+
+    this.mutateTrack(downloadId, track.id, {
+      status: 'downloading',
+      progress: 0,
+    });
+
+    try {
+      const artistDir = getArtistDir(track.artist);
+      const filePath = await downloadTrack(
+        { title: track.title, artist: track.artist },
+        artistDir,
+        item.format,
+        item.quality,
+        item.coverArt,
+        (progress: DownloadProgress) => {
+          if (progress.percent >= 99.5) {
+            this.mutateTrack(downloadId, track.id, {
+              status: 'converting',
+              progress: 99,
+            });
+          } else {
+            this.mutateTrack(downloadId, track.id, {
+              progress: Math.round(progress.percent),
+              speed: progress.speed,
+              eta: progress.eta,
+            });
+          }
+        },
+        signal
+      );
+
+      this.mutateTrack(downloadId, track.id, {
+        status: 'done',
+        progress: 100,
+        filePath,
+        speed: undefined,
+        eta: undefined,
+      });
+      logger.info(`Done: "${track.title}" → ${filePath}`);
+    } catch (err) {
+      const msg = (err as Error).message;
+
+      if (msg === 'Cancelled') {
+        logger.debug(`Cancelled: "${track.title}"`);
+      } else if (attempt < MAX_RETRIES) {
+        const delay = RETRY_DELAYS_MS[attempt] ?? 8000;
+        logger.warn(
+          `Track failed (attempt ${attempt + 1}/${MAX_RETRIES + 1}), retrying in ${delay}ms: "${track.title}"`
+        );
+        this.mutateTrack(downloadId, track.id, {
+          status: 'queued',
+          progress: 0,
+          error: undefined,
+        });
+        // Schedule retry after freeing the slot
+        setTimeout(() => {
+          this.pendingTracks.unshift({ downloadId, track, attempt: attempt + 1 });
+          this.drain();
+        }, delay);
+      } else {
+        logger.error(`Track failed after ${MAX_RETRIES + 1} attempts: "${track.title}"`, msg);
+        this.mutateTrack(downloadId, track.id, {
+          status: 'error',
+          error: msg,
+        });
+      }
+    } finally {
+      this.activeCount--;
+      this.drain();
+    }
+  }
+}
+
+export const queue = new DownloadQueue();
