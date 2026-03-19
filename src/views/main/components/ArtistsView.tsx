@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useUnit } from 'effector-react';
 import { Mic2, Play, ChevronRight, ChevronDown } from 'lucide-react';
-import { $downloads } from '../stores/downloads';
+import { $downloads, $search } from '../stores/downloads';
 import { $focusedArtist } from '../stores/nav';
 import { playPlaylist, playTrack } from '../stores/player';
 import TrackRow from './TrackRow';
@@ -10,6 +10,7 @@ import type { TrackInfo } from '../../../shared/types';
 export default function ArtistsView() {
   const downloads = useUnit($downloads);
   const focusedArtist = useUnit($focusedArtist);
+  const search = useUnit($search);
   const [expanded, setExpanded] = useState<Set<string>>(
     focusedArtist ? new Set([focusedArtist]) : new Set()
   );
@@ -29,7 +30,10 @@ export default function ArtistsView() {
     }
   }
 
-  const artists = [...artistMap.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  const q = search.trim().toLowerCase();
+  const artists = [...artistMap.entries()]
+    .filter(([artist]) => !q || artist.toLowerCase().includes(q))
+    .sort((a, b) => a[0].localeCompare(b[0]));
 
   if (artists.length === 0) {
     return (
@@ -53,7 +57,7 @@ export default function ArtistsView() {
 
   return (
     <main className="flex-1 overflow-y-auto overflow-x-hidden">
-      <div className="sticky top-0 z-10 bg-zinc-800/95 backdrop-blur border-b border-zinc-700 flex items-center px-4 py-1.5 text-xs text-zinc-600 font-medium uppercase tracking-wide select-none">
+      <div className="sticky top-0 z-10 bg-zinc-800/60 backdrop-blur border-b border-zinc-700/60 flex items-center px-4 py-1.5 text-xs text-zinc-500 font-medium select-none">
         <div className="w-5 shrink-0" />
         <div className="flex-1">Artist</div>
         <div className="w-20 text-right">Tracks</div>

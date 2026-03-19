@@ -80,11 +80,11 @@ export default function DownloadRow({ item }: Props) {
   const progressColor = item.status === 'error' ? 'bg-red-500' : 'bg-emerald-500';
 
   return (
-    <div className="border-b border-zinc-800 last:border-b-0">
+    <div className="border-b border-zinc-700/40 last:border-b-0">
       <div
         className={`flex items-center gap-0 px-3 py-2 transition-colors group select-none ${
           canExpand ? 'cursor-pointer' : ''
-        } ${isExpanded ? 'bg-zinc-800/40' : 'hover:bg-zinc-800/30'}`}
+        } ${isExpanded ? 'bg-zinc-800/50' : 'hover:bg-zinc-800/40'}`}
         onClick={() => canExpand && rowToggled(item.id)}
         onContextMenu={open}
       >

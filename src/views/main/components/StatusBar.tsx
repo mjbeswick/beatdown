@@ -11,7 +11,7 @@ export default function StatusBar() {
 
   return (
     <footer
-      className={`bg-zinc-800 border-t border-zinc-700 px-4 py-1 flex items-center gap-3 text-xs text-zinc-600 font-mono shrink-0 tabular-nums transition-all ${
+      className={`bg-zinc-800/60 border-t border-zinc-700/60 px-4 py-1 flex items-center gap-3 text-xs text-zinc-500 font-mono shrink-0 tabular-nums transition-all ${
         hasPlayer ? 'h-7 opacity-0 pointer-events-none' : 'h-7'
       }`}
     >

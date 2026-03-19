@@ -1,5 +1,10 @@
 import type { DownloadItem, LyricLine, AddDownloadParams, SpotifyContent } from './types';
 
+export interface ReelPaths {
+  libraryDir: string;
+  playlistsDir: string;
+}
+
 /**
  * Shared RPC schema used by both bun and webview sides.
  * Satisfies the ElectrobunRPCSchema shape structurally.
@@ -23,6 +28,8 @@ export interface ReelRPCSchema {
       'window:zoom': { params: undefined; response: void };
       'app:forceQuit': { params: undefined; response: void };
       'app:cancelClose': { params: undefined; response: void };
+      'paths:get': { params: undefined; response: ReelPaths };
+      'paths:browse': { params: { type: 'library' | 'playlists' }; response: ReelPaths | null };
     };
     messages: {
       'downloads:state': DownloadItem[];

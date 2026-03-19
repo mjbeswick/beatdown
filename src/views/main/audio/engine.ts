@@ -15,6 +15,7 @@ let audioCtx: AudioContext | null = null;
 let analyserNode: AnalyserNode | null = null;
 let sourceNode: MediaElementAudioSourceNode | null = null;
 const audio = new Audio();
+audio.crossOrigin = 'anonymous';
 audio.preload = 'auto';
 
 function getOrCreateCtx(): AudioContext {

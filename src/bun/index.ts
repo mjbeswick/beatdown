@@ -1,10 +1,11 @@
-import Electrobun, { BrowserWindow, defineElectrobunRPC } from 'electrobun/bun';
+import Electrobun, { BrowserWindow, defineElectrobunRPC, Utils, ApplicationMenu } from 'electrobun/bun';
 import type { DownloadItem, LyricLine } from '../shared/types';
 import type { AddDownloadParams } from '../shared/types';
 import type { ReelRPCSchema } from '../shared/rpc-schema';
 import { queue } from './services/queue';
 import { getSpotifyContent } from './services/spotify';
 import { getLyrics } from './services/lyrics';
+import { paths } from './services/paths';
 import { logger } from './logger';
 
 // ── Audio streaming server ────────────────────────────────────────────────────
@@ -13,9 +14,12 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 
+const STREAM_HOST = '127.0.0.1';
+
 const streamServer = Bun.serve({
+  hostname: STREAM_HOST,
   port: 0, // auto-assign
-  fetch(req) {
+  async fetch(req) {
     // Echo the request's Origin header back (or allow all). This is more
     // robust than a bare '*' because WKWebView with custom URL schemes
     // (e.g. views://) may send Origin: null or a custom-scheme origin that
@@ -27,7 +31,7 @@ const streamServer = Bun.serve({
         status: 204,
         headers: {
           'Access-Control-Allow-Origin': origin,
-          'Access-Control-Allow-Methods': 'GET, OPTIONS',
+          'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
           'Access-Control-Allow-Headers': 'Range',
           'Access-Control-Max-Age': '86400',
           'Vary': 'Origin',
@@ -35,57 +39,128 @@ const streamServer = Bun.serve({
       });
     }
 
+    if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+      return new Response('Method not allowed', { status: 405 });
+    }
+
     const url = new URL(req.url);
-    const filePath = decodeURIComponent(url.pathname);
+
+    if (url.pathname === '/health') {
+      return new Response('OK', { status: 200, headers: { 'Access-Control-Allow-Origin': origin } });
+    }
+
+    const filePath = getRequestedFilePath(url);
+    if (!filePath) {
+      return new Response('Bad request', { status: 400 });
+    }
+
     const cleanPath = path.resolve(filePath);
 
-    // Security: ensure the resolved path stays within ~/Music/Reel
-    const musicBase = path.join(process.env.HOME ?? process.env.USERPROFILE ?? '', 'Music', 'Reel');
-    if (!cleanPath.startsWith(musicBase)) {
+    // Security: ensure the resolved path stays within the configured library dir
+    const libraryBase = paths.libraryDir;
+    logger.info(`Stream request: ${req.method} ${cleanPath} (base: ${libraryBase})`);
+    if (!cleanPath.startsWith(libraryBase + path.sep)) {
+      logger.warn(`Stream forbidden: ${cleanPath}`);
       return new Response('Forbidden', { status: 403 });
     }
 
-    if (!fs.existsSync(cleanPath)) {
+    const file = Bun.file(cleanPath);
+    if (!(await file.exists())) {
+      logger.warn(`Stream not found: ${cleanPath}`);
       return new Response('Not found', { status: 404 });
     }
 
-    const stat = fs.statSync(cleanPath);
+    const fileSize = file.size;
+    const contentType = getAudioMime(cleanPath);
     const range = req.headers.get('range');
+    const body = req.method === 'HEAD' ? null : file;
+    const baseHeaders = {
+      'Accept-Ranges': 'bytes',
+      'Content-Type': contentType,
+      'Content-Disposition': 'inline',
+      'Cache-Control': 'no-store',
+      'Access-Control-Allow-Origin': origin,
+      'Access-Control-Expose-Headers': 'Content-Range, Content-Length, Accept-Ranges, Content-Type',
+      'Vary': 'Origin',
+    };
 
     if (range) {
-      const [, start = '0', end = ''] = range.replace('bytes=', '').split('-');
-      const startByte = parseInt(start, 10);
-      const endByte = end ? parseInt(end, 10) : stat.size - 1;
-      const chunkSize = endByte - startByte + 1;
+      const parsedRange = parseByteRange(range, fileSize);
+      if (!parsedRange) {
+        return new Response('Requested range not satisfiable', {
+          status: 416,
+          headers: {
+            ...baseHeaders,
+            'Content-Range': `bytes */${fileSize}`,
+          },
+        });
+      }
 
-      const stream = fs.createReadStream(cleanPath, { start: startByte, end: endByte });
-      return new Response(stream as unknown as ReadableStream, {
+      const { start, end } = parsedRange;
+      const chunkSize = end - start + 1;
+
+      return new Response(req.method === 'HEAD' ? null : file.slice(start, end + 1), {
         status: 206,
         headers: {
-          'Content-Range': `bytes ${startByte}-${endByte}/${stat.size}`,
-          'Accept-Ranges': 'bytes',
+          ...baseHeaders,
+          'Content-Range': `bytes ${start}-${end}/${fileSize}`,
           'Content-Length': String(chunkSize),
-          'Content-Type': getAudioMime(cleanPath),
-          'Access-Control-Allow-Origin': origin,
-          'Access-Control-Expose-Headers': 'Content-Range, Content-Length, Accept-Ranges',
-          'Vary': 'Origin',
         },
       });
     }
 
-    const stream = fs.createReadStream(cleanPath);
-    return new Response(stream as unknown as ReadableStream, {
+    return new Response(body, {
       status: 200,
       headers: {
-        'Content-Length': String(stat.size),
-        'Content-Type': getAudioMime(cleanPath),
-        'Accept-Ranges': 'bytes',
-        'Access-Control-Allow-Origin': origin,
-        'Vary': 'Origin',
+        ...baseHeaders,
+        'Content-Length': String(fileSize),
       },
     });
   },
 });
+
+function getRequestedFilePath(url: URL): string | null {
+  const queryPath = url.searchParams.get('path');
+  if (queryPath) return queryPath;
+
+  if (url.pathname === '/' || url.pathname === '/stream') return null;
+
+  // Backward compatibility for older clients that put the file path in the URL path.
+  const encodedPath = url.pathname.startsWith('/') ? url.pathname.slice(1) : url.pathname;
+  const decodedPath = decodeURIComponent(encodedPath);
+  return decodedPath.startsWith('/') ? decodedPath : decodeURIComponent(url.pathname);
+}
+
+function parseByteRange(rangeHeader: string, fileSize: number): { start: number; end: number } | null {
+  if (!rangeHeader.startsWith('bytes=')) return null;
+
+  const spec = rangeHeader.slice('bytes='.length).trim();
+  if (!spec || spec.includes(',')) return null;
+
+  const [rawStart, rawEnd = ''] = spec.split('-', 2);
+
+  if (rawStart === '') {
+    const suffixLength = Number.parseInt(rawEnd, 10);
+    if (!Number.isFinite(suffixLength) || suffixLength <= 0) return null;
+
+    const chunkSize = Math.min(suffixLength, fileSize);
+    return {
+      start: Math.max(0, fileSize - chunkSize),
+      end: fileSize - 1,
+    };
+  }
+
+  const start = Number.parseInt(rawStart, 10);
+  if (!Number.isFinite(start) || start < 0 || start >= fileSize) return null;
+
+  const requestedEnd = rawEnd === '' ? fileSize - 1 : Number.parseInt(rawEnd, 10);
+  if (!Number.isFinite(requestedEnd)) return null;
+
+  const end = Math.min(requestedEnd, fileSize - 1);
+  if (end < start) return null;
+
+  return { start, end };
+}
 
 function getAudioMime(filePath: string): string {
   const ext = path.extname(filePath).toLowerCase();
@@ -160,16 +235,15 @@ const rpc = defineElectrobunRPC<ReelRPCSchema, 'bun'>('bun', {
 
       'app:forceQuit': () => {
         isForceQuitting = true;
-        confirmPending = false;
         process.exit(0);
       },
 
       'app:cancelClose': () => {
-        confirmPending = false;
+        // no-op: close confirmation is now handled natively via showMessageBox
       },
 
       'stream:getUrl': ({ filePath }) => {
-        return `http://localhost:${streamPort}${encodeURI(filePath)}`;
+        return `http://${STREAM_HOST}:${streamPort}/stream?path=${encodeURIComponent(filePath)}`;
       },
 
       'stream:getPort': () => streamPort,
@@ -184,6 +258,30 @@ const rpc = defineElectrobunRPC<ReelRPCSchema, 'bun'>('bun', {
         } else {
           win.maximize();
         }
+      },
+
+      'paths:get': () => {
+        return paths.getAll();
+      },
+
+      'paths:browse': async ({ type }) => {
+        const current = type === 'library' ? paths.libraryDir : paths.playlistsDir;
+        const selected = await Utils.openFileDialog({
+          startingFolder: current,
+          canChooseFiles: false,
+          canChooseDirectory: true,
+          allowsMultipleSelection: false,
+        });
+        // User cancelled or nothing selected
+        if (!selected || selected.length === 0 || selected[0] === '') return null;
+        const chosen = selected[0].trim();
+        if (!chosen) return null;
+        if (type === 'library') {
+          paths.setLibraryDir(chosen);
+        } else {
+          paths.setPlaylistsDir(chosen);
+        }
+        return paths.getAll();
       },
     },
   },
@@ -211,7 +309,6 @@ logger.info('Reel starting up...');
 // ── Close confirmation state ──────────────────────────────────────────────────
 
 let isForceQuitting = false;
-let confirmPending = false;
 
 // ── Window state persistence ──────────────────────────────────────────────────
 
@@ -268,6 +365,34 @@ function createMainWindow() {
 
 const win = createMainWindow();
 
+// ── Application menu (required for macOS edit shortcuts: Cmd+C/V/X/Z etc.) ───
+ApplicationMenu.setApplicationMenu([
+  {
+    label: 'Reel',
+    submenu: [
+      { role: 'about' },
+      { type: 'separator' },
+      { role: 'hide' },
+      { role: 'hideOthers' },
+      { role: 'showAll' },
+      { type: 'separator' },
+      { role: 'quit' },
+    ],
+  },
+  {
+    label: 'Edit',
+    submenu: [
+      { role: 'undo' },
+      { role: 'redo' },
+      { type: 'separator' },
+      { role: 'cut' },
+      { role: 'copy' },
+      { role: 'paste' },
+      { role: 'selectAll' },
+    ],
+  },
+]);
+
 // Send stream port to webview once connected (small delay to allow ws handshake)
 setTimeout(() => {
   try {
@@ -282,33 +407,38 @@ logger.info(`Window created: ${win.id}`);
 // The 'before-quit' event fires after the last window is closed, just before the
 // process exits. It can be cancelled by setting event.response = { allow: false }.
 // We use this to show a confirmation modal when downloads are in progress.
-Electrobun.events.on('before-quit', (event: any) => {
+Electrobun.events.on('before-quit', async (event: any) => {
   if (isForceQuitting) return; // already confirmed by user – let it quit
-
-  if (confirmPending) {
-    // User closed the confirmation window without responding – treat as confirmed
-    isForceQuitting = true;
-    return;
-  }
 
   const activeDownloads = queue.getAll().filter(
     (d) => d.status === 'queued' || d.status === 'active'
   );
   if (activeDownloads.length === 0) return;
 
-  // Cancel the quit and re-open the main window with a confirm modal
+  // Cancel the quit – we need the user to confirm first
   event.response = { allow: false };
-  confirmPending = true;
 
-  const confirmWin = createMainWindow();
   const activeCount = activeDownloads.length;
+  const countLabel = activeCount === 1
+    ? '1 download is still in progress.'
+    : `${activeCount} downloads are still in progress.`;
 
-  // Wait for the webview DOM to be ready before sending the close-request message
-  confirmWin.webview.on('dom-ready', () => {
-    setTimeout(() => {
-      try {
-        rpc.proxy.send['app:requestClose']({ activeCount });
-      } catch {}
-    }, 400);
+  const { response } = await Utils.showMessageBox({
+    type: 'warning',
+    title: 'Downloads in Progress',
+    message: countLabel,
+    detail: 'Closing the app will interrupt them — you can resume when you reopen.',
+    buttons: ['Close Anyway', 'Continue Downloading'],
+    defaultId: 1,
+    cancelId: 1,
   });
+
+  if (response === 0) {
+    // User confirmed – force quit
+    isForceQuitting = true;
+    process.exit(0);
+  } else {
+    // User cancelled – restore the window so they can keep working
+    createMainWindow();
+  }
 });

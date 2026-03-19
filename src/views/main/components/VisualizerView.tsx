@@ -2,51 +2,84 @@ import { useEffect, useRef, useState } from 'react';
 import { useUnit } from 'effector-react';
 import { AudioWaveform, ChevronLeft, ChevronRight, Settings, Maximize, Minimize } from 'lucide-react';
 import { $player } from '../stores/player';
+import {
+  $visualizerSettings,
+  setVisualizerAutoCycle,
+  setVisualizerBlendSeconds,
+  setVisualizerCycleSeconds,
+  setVisualizerPresetName,
+} from '../stores/visualizer';
 import { getAnalyserNode, getAudioContext } from '../audio/engine';
-
-// butterchurn and presets may not be tree-shaken, import carefully
-let butterchurn: any = null;
-let butterchurnPresets: any = null;
-
-try {
-  butterchurn = require('butterchurn').default ?? require('butterchurn');
-  butterchurnPresets = require('butterchurn-presets').default ?? require('butterchurn-presets');
-} catch {
-  // gracefully degrade if butterchurn unavailable
-}
+import {
+  getButterchurnLibrary,
+  getVisualizerRenderOptions,
+  loadVisualizerPresets,
+} from '../lib/visualizer';
 
 export default function VisualizerView() {
-  const player = useUnit($player);
+  const [player, visualizerSettings] = useUnit([$player, $visualizerSettings]);
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const vizRef = useRef<any>(null);
   const rafRef = useRef<number>(0);
+  const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const presetsRef = useRef<Record<string, unknown>>({});
   const presetNamesRef = useRef<string[]>([]);
   const presetIdxRef = useRef(0);
   const presetTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
   // Mutable config kept in refs so callbacks never go stale
-  const autoCycleRef = useRef(true);
-  const cycleSecsRef = useRef(30);
-  const blendSecsRef = useRef(2.0);
+  const presetNameRef = useRef(visualizerSettings.presetName);
+  const autoCycleRef = useRef(visualizerSettings.autoCycle);
+  const cycleSecsRef = useRef(visualizerSettings.cycleSeconds);
+  const blendSecsRef = useRef(visualizerSettings.blendSeconds);
+  const qualityRef = useRef(visualizerSettings.quality);
+  const fxaaRef = useRef(visualizerSettings.fxaa);
+  const meshDensityRef = useRef(visualizerSettings.meshDensity);
 
   // React state for rendering
   const [presetNames, setPresetNames] = useState<string[]>([]);
   const [currentIdx, setCurrentIdx] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
-  const [autoCycle, setAutoCycle] = useState(true);
-  const [cycleSecs, setCycleSecs] = useState(30);
-  const [blendSecs, setBlendSecs] = useState(2.0);
 
-  const doLoadPreset = (idx: number) => {
+  const butterchurn = getButterchurnLibrary();
+
+  const doLoadPreset = (idx: number, persist = true) => {
     const names = presetNamesRef.current;
     if (!vizRef.current || names.length === 0) return;
     const i = ((idx % names.length) + names.length) % names.length;
-    vizRef.current.loadPreset(presetsRef.current[names[i]], blendSecsRef.current);
+    const presetName = names[i];
+    vizRef.current.loadPreset(presetsRef.current[presetName], blendSecsRef.current);
     presetIdxRef.current = i;
     setCurrentIdx(i);
+    if (persist) setVisualizerPresetName(presetName);
+  };
+
+  const applyRendererSettings = () => {
+    if (!vizRef.current || !canvasRef.current) return;
+
+    const canvas = canvasRef.current;
+    const renderOptions = getVisualizerRenderOptions(
+      {
+        quality: qualityRef.current,
+        fxaa: fxaaRef.current,
+        meshDensity: meshDensityRef.current,
+      },
+      canvas.offsetWidth || 800,
+      canvas.offsetHeight || 600
+    );
+
+    vizRef.current.setOutputAA(renderOptions.outputFXAA);
+    vizRef.current.setRendererSize(renderOptions.width, renderOptions.height, renderOptions);
+  };
+
+  const teardownVisualizer = () => {
+    clearTimeout(presetTimerRef.current);
+    cancelAnimationFrame(rafRef.current);
+    resizeObserverRef.current?.disconnect();
+    resizeObserverRef.current = null;
+    vizRef.current = null;
   };
 
   const scheduleAutoCycle = () => {
@@ -88,60 +121,103 @@ export default function VisualizerView() {
   }, []);
 
   useEffect(() => {
-    if (!butterchurn || !butterchurnPresets || !canvasRef.current) return;
+    presetNameRef.current = visualizerSettings.presetName;
+    autoCycleRef.current = visualizerSettings.autoCycle;
+    cycleSecsRef.current = visualizerSettings.cycleSeconds;
+    blendSecsRef.current = visualizerSettings.blendSeconds;
+    qualityRef.current = visualizerSettings.quality;
+    fxaaRef.current = visualizerSettings.fxaa;
+    meshDensityRef.current = visualizerSettings.meshDensity;
+  }, [
+    visualizerSettings.presetName,
+    visualizerSettings.autoCycle,
+    visualizerSettings.cycleSeconds,
+    visualizerSettings.blendSeconds,
+    visualizerSettings.quality,
+    visualizerSettings.fxaa,
+    visualizerSettings.meshDensity,
+  ]);
 
-    const canvas = canvasRef.current;
-    const audioCtx = getAudioContext();
-    const analyser = getAnalyserNode();
+  useEffect(() => {
+    if (vizRef.current) scheduleAutoCycle();
+  }, [visualizerSettings.autoCycle, visualizerSettings.cycleSeconds]);
 
-    if (!audioCtx || !analyser) return;
+  useEffect(() => {
+    if (vizRef.current) applyRendererSettings();
+  }, [visualizerSettings.quality, visualizerSettings.fxaa, visualizerSettings.meshDensity]);
 
-    let presets: Record<string, unknown> = {};
-    try {
-      if (typeof butterchurnPresets.getPresets === 'function') {
-        presets = butterchurnPresets.getPresets();
-      } else if (typeof butterchurnPresets === 'object') {
-        presets = butterchurnPresets as Record<string, unknown>;
+  useEffect(() => {
+    const names = presetNamesRef.current;
+    if (!vizRef.current || names.length === 0 || !visualizerSettings.presetName) return;
+
+    const idx = names.indexOf(visualizerSettings.presetName);
+    if (idx !== -1 && idx !== presetIdxRef.current) {
+      doLoadPreset(idx, false);
+    }
+  }, [visualizerSettings.presetName]);
+
+  useEffect(() => {
+    if (!butterchurn || !canvasRef.current || vizRef.current) return;
+    if (!player.current || !player.isPlaying) return;
+
+    const frameId = requestAnimationFrame(() => {
+      if (vizRef.current || !canvasRef.current) return;
+
+      const audioCtx = getAudioContext();
+      const analyser = getAnalyserNode();
+      if (!audioCtx || !analyser) return;
+
+      const canvas = canvasRef.current;
+      const renderOptions = getVisualizerRenderOptions(
+        {
+          quality: qualityRef.current,
+          fxaa: fxaaRef.current,
+          meshDensity: meshDensityRef.current,
+        },
+        canvas.offsetWidth || 800,
+        canvas.offsetHeight || 600
+      );
+      const presets = loadVisualizerPresets();
+
+      presetsRef.current = presets;
+      presetNamesRef.current = Object.keys(presets);
+      setPresetNames(presetNamesRef.current);
+
+      vizRef.current = butterchurn.createVisualizer(audioCtx, canvas, renderOptions);
+
+      vizRef.current.connectAudio(analyser);
+
+      if (presetNamesRef.current.length > 0) {
+        const requestedPreset = presetNameRef.current;
+        const initialPresetName = requestedPreset && presetNamesRef.current.includes(requestedPreset)
+          ? requestedPreset
+          : presetNamesRef.current[0];
+        const initialIdx = presetNamesRef.current.indexOf(initialPresetName);
+        doLoadPreset(initialIdx, requestedPreset !== initialPresetName);
       }
-    } catch {
-      presets = {};
-    }
 
-    presetsRef.current = presets;
-    presetNamesRef.current = Object.keys(presets);
-    setPresetNames(presetNamesRef.current);
+      scheduleAutoCycle();
 
-    vizRef.current = butterchurn.createVisualizer(audioCtx, canvas, {
-      width: canvas.offsetWidth || 800,
-      height: canvas.offsetHeight || 600,
-    });
-
-    vizRef.current.connectAudio(analyser);
-
-    if (presetNamesRef.current.length > 0) {
-      vizRef.current.loadPreset(presets[presetNamesRef.current[0]], 0);
-    }
-
-    scheduleAutoCycle();
-
-    const render = () => {
-      if (vizRef.current) vizRef.current.render();
+      const render = () => {
+        if (vizRef.current) vizRef.current.render();
+        rafRef.current = requestAnimationFrame(render);
+      };
       rafRef.current = requestAnimationFrame(render);
-    };
-    rafRef.current = requestAnimationFrame(render);
 
-    const ro = new ResizeObserver(() => {
-      if (vizRef.current && canvas) {
-        vizRef.current.setRendererSize(canvas.offsetWidth, canvas.offsetHeight);
-      }
+      resizeObserverRef.current = new ResizeObserver(() => {
+        if (vizRef.current) {
+          applyRendererSettings();
+        }
+      });
+      resizeObserverRef.current.observe(canvas);
     });
-    ro.observe(canvas);
 
+    return () => cancelAnimationFrame(frameId);
+  }, [butterchurn, player.current?.track.id, player.isPlaying]);
+
+  useEffect(() => {
     return () => {
-      cancelAnimationFrame(rafRef.current);
-      clearTimeout(presetTimerRef.current);
-      ro.disconnect();
-      vizRef.current = null;
+      teardownVisualizer();
     };
   }, []);
 
@@ -225,12 +301,8 @@ export default function VisualizerView() {
             <span>Auto-cycle presets</span>
             <input
               type="checkbox"
-              checked={autoCycle}
-              onChange={e => {
-                setAutoCycle(e.target.checked);
-                autoCycleRef.current = e.target.checked;
-                scheduleAutoCycle();
-              }}
+              checked={visualizerSettings.autoCycle}
+              onChange={(e) => setVisualizerAutoCycle(e.target.checked)}
               className="accent-violet-500"
             />
           </label>
@@ -238,20 +310,16 @@ export default function VisualizerView() {
           <label className="flex flex-col gap-1">
             <span className="flex justify-between">
               <span>Cycle duration</span>
-              <span className="text-white/50">{cycleSecs}s</span>
+              <span className="text-white/50">{visualizerSettings.cycleSeconds}s</span>
             </span>
             <input
               type="range"
               min={5}
               max={120}
               step={5}
-              value={cycleSecs}
-              disabled={!autoCycle}
-              onChange={e => {
-                const v = Number(e.target.value);
-                setCycleSecs(v);
-                cycleSecsRef.current = v;
-              }}
+              value={visualizerSettings.cycleSeconds}
+              disabled={!visualizerSettings.autoCycle}
+              onChange={(e) => setVisualizerCycleSeconds(Number(e.target.value))}
               className="accent-violet-500 disabled:opacity-40"
             />
           </label>
@@ -259,19 +327,15 @@ export default function VisualizerView() {
           <label className="flex flex-col gap-1">
             <span className="flex justify-between">
               <span>Blend time</span>
-              <span className="text-white/50">{blendSecs}s</span>
+              <span className="text-white/50">{visualizerSettings.blendSeconds}s</span>
             </span>
             <input
               type="range"
               min={0}
               max={10}
               step={0.5}
-              value={blendSecs}
-              onChange={e => {
-                const v = Number(e.target.value);
-                setBlendSecs(v);
-                blendSecsRef.current = v;
-              }}
+              value={visualizerSettings.blendSeconds}
+              onChange={(e) => setVisualizerBlendSeconds(Number(e.target.value))}
               className="accent-violet-500"
             />
           </label>

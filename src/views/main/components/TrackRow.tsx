@@ -25,17 +25,6 @@ function TrackIcon({ status }: { status: TrackInfo['status'] }) {
   }
 }
 
-function StatusLabel({ track }: { track: TrackInfo }) {
-  switch (track.status) {
-    case 'queued':      return <span className="text-zinc-600">Queued</span>;
-    case 'downloading': return <span className="text-emerald-400">Downloading</span>;
-    case 'converting':  return <span className="text-blue-400">Converting</span>;
-    case 'done':        return <span className="text-emerald-400">Done</span>;
-    case 'error':
-      return <span className="text-red-400 cursor-help" title={track.error}>Error</span>;
-  }
-}
-
 interface Props {
   track: TrackInfo;
   downloadId?: string;
@@ -73,8 +62,8 @@ export default function TrackRow({ track, downloadId, coverArt, albumName = '', 
 
   return (
     <div
-      className={`flex items-center gap-2 pl-14 pr-3 py-1.5 border-b border-zinc-800/40 last:border-0 group relative ${
-        isDone ? 'cursor-pointer hover:bg-zinc-800/30' : ''
+      className={`flex items-center gap-2 pl-14 pr-3 py-1.5 border-b border-zinc-700/30 last:border-0 group relative ${
+        isDone ? 'cursor-pointer hover:bg-zinc-800/40' : ''
       } ${isNowPlaying ? 'bg-emerald-900/10' : ''}`}
       onClick={handleClick}
       onContextMenu={downloadId ? open : undefined}
@@ -123,11 +112,6 @@ export default function TrackRow({ track, downloadId, coverArt, albumName = '', 
       {/* ETA */}
       <div className="w-16 shrink-0 text-right font-mono text-xs text-zinc-600 tabular-nums">
         {track.status === 'downloading' && track.eta ? fmtEta(track.eta) : ''}
-      </div>
-
-      {/* Status */}
-      <div className="w-20 shrink-0 text-right text-xs">
-        <StatusLabel track={track} />
       </div>
 
       <div className="w-7 shrink-0" />

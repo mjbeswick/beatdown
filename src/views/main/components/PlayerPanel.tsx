@@ -41,7 +41,7 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
   const progressPct = player.duration > 0 ? (player.currentTime / player.duration) * 100 : 0;
 
   return (
-    <div className="shrink-0 h-16 bg-zinc-900 border-t border-zinc-700 flex items-center gap-4 px-4 z-10">
+    <div className="shrink-0 h-16 bg-zinc-800/70 border-t border-zinc-700/60 flex items-center gap-4 px-4 z-10">
       {/* Track info */}
       <div className="flex items-center gap-2.5 w-52 shrink-0 min-w-0">
         <button
@@ -58,14 +58,14 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
         <div className="min-w-0">
           <button
             onClick={() => navToAlbum(player.current!.downloadId)}
-            className="block text-zinc-200 text-xs font-medium truncate max-w-full hover:text-violet-400 transition-colors text-left"
+            className="block text-zinc-200 text-xs font-medium truncate max-w-full hover:text-emerald-500 transition-colors text-left"
             title={player.current.track.title}
           >
             {player.current.track.title}
           </button>
           <button
             onClick={() => navToArtist(player.current!.track.artist)}
-            className="block text-zinc-500 text-[11px] truncate max-w-full hover:text-violet-400 transition-colors text-left"
+            className="block text-zinc-500 text-[11px] truncate max-w-full hover:text-emerald-500 transition-colors text-left"
             title={player.current.track.artist}
           >
             {player.current.track.artist}
@@ -79,7 +79,7 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
           <button
             onClick={() => toggleShuffle()}
             className={`transition-colors ${
-              player.shuffle === 'on' ? 'text-violet-400' : 'text-zinc-500 hover:text-zinc-300'
+              player.shuffle === 'on' ? 'text-emerald-500' : 'text-zinc-500 hover:text-zinc-300'
             }`}
             title="Shuffle"
           >
@@ -117,7 +117,7 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
           <button
             onClick={() => toggleRepeat()}
             className={`transition-colors ${
-              player.repeat !== 'off' ? 'text-violet-400' : 'text-zinc-500 hover:text-zinc-300'
+              player.repeat !== 'off' ? 'text-emerald-500' : 'text-zinc-500 hover:text-zinc-300'
             }`}
             title={player.repeat === 'off' ? 'Repeat off' : player.repeat === 'all' ? 'Repeat all' : 'Repeat one'}
           >
@@ -130,7 +130,7 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
           <span className="text-zinc-600 text-[10px] tabular-nums font-mono w-8 text-right shrink-0">
             {elapsed}
           </span>
-          <div className="relative flex-1 h-1 group">
+          <div className="relative flex-1 h-3 flex items-center group">
             <input
               type="range"
               min={0}
@@ -138,10 +138,8 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
               step={0.1}
               value={player.currentTime}
               onChange={(e) => seek(parseFloat(e.target.value))}
-              className="w-full h-1 appearance-none bg-zinc-700 rounded-full cursor-pointer seeker"
-              style={{
-                background: `linear-gradient(to right, #a78bfa ${progressPct}%, #3f3f46 ${progressPct}%)`,
-              }}
+              className="w-full h-1 appearance-none rounded-full cursor-pointer seeker"
+              style={{ '--progress': `${progressPct}%` } as React.CSSProperties}
             />
           </div>
           <span className="text-zinc-600 text-[10px] tabular-nums font-mono w-8 shrink-0">
@@ -166,17 +164,14 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
           step={0.01}
           value={player.volume}
           onChange={(e) => setVolume(parseFloat(e.target.value))}
-          className="w-18 h-1 appearance-none bg-zinc-700 rounded-full cursor-pointer volume-slider"
-          style={{
-            background: `linear-gradient(to right, #a78bfa ${player.volume * 100}%, #3f3f46 ${player.volume * 100}%)`,
-            width: '72px',
-          }}
+          className="w-18 h-1 appearance-none rounded-full cursor-pointer volume-slider"
+          style={{ '--progress': `${player.volume * 100}%`, width: '72px' } as React.CSSProperties}
           title="Volume"
         />
         <button
           onClick={onLyricsToggle}
           className={`transition-colors shrink-0 ${
-            lyricsOpen ? 'text-violet-400' : 'text-zinc-500 hover:text-zinc-300'
+            lyricsOpen ? 'text-emerald-500' : 'text-zinc-500 hover:text-zinc-300'
           }`}
           title="Lyrics"
         >

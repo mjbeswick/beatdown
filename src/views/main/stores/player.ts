@@ -192,8 +192,13 @@ rpc.addMessageListener('stream:port', ({ port }) => {
   streamPortReceived(port);
 });
 
+// Fallback: request the port directly in case the push message was missed
+rpc.proxy.request['stream:getPort'](undefined as any)
+  .then(streamPortReceived)
+  .catch(() => {});
+
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 export function getStreamUrl(filePath: string, port: number): string {
-  return `http://localhost:${port}${encodeURI(filePath)}`;
+  return `http://127.0.0.1:${port}/stream?path=${encodeURIComponent(filePath)}`;
 }

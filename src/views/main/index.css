@@ -1,7 +1,30 @@
 @import "tailwindcss";
 
+/* ── Dark theme (default) ──────────────────────────────────────────────────── */
 :root {
   color-scheme: dark;
+}
+
+/* ── Light theme ───────────────────────────────────────────────────────────── */
+/* Tailwind v4 exposes color tokens as CSS custom properties, so overriding the
+   zinc scale here automatically reflects in every bg-zinc-* / text-zinc-* class
+   without touching component files. We map light grays to where dark ones were. */
+.light-theme {
+  color-scheme: light;
+  --color-zinc-950: #f9fafb;
+  --color-zinc-900: #ffffff;
+  --color-zinc-800: #f4f4f5;
+  --color-zinc-700: #e4e4e7;
+  --color-zinc-600: #a1a1aa;
+  --color-zinc-500: #6b7280;
+  --color-zinc-400: #52525b;
+  --color-zinc-300: #3f3f46;
+  --color-zinc-200: #27272a;
+  --color-zinc-100: #18181b;
+  --color-zinc-50:  #09090b;
+  /* Keep accent colours vivid in both themes */
+  --color-emerald-400: #059669;
+  --color-emerald-500: #047857;
 }
 
 * {
@@ -15,6 +38,11 @@ body {
   -webkit-font-smoothing: antialiased;
   background: #18181b;
   color: #e4e4e7;
+}
+
+.light-theme body {
+  background: #ffffff;
+  color: #18181b;
 }
 
 /* Scrollbar */
@@ -31,6 +59,12 @@ body {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #52525b;
+}
+.light-theme ::-webkit-scrollbar-thumb {
+  background: #d4d4d8;
+}
+.light-theme ::-webkit-scrollbar-thumb:hover {
+  background: #a1a1aa;
 }
 
 /* Range input */
@@ -52,4 +86,28 @@ input[type="range"]::-webkit-slider-thumb {
   border-radius: 50%;
   background: #10b981;
   margin-top: -4px;
+}
+.seeker::-webkit-slider-runnable-track {
+  background: linear-gradient(to right, #10b981 var(--progress, 0%), #3f3f46 var(--progress, 0%));
+}
+.volume-slider::-webkit-slider-runnable-track {
+  background: linear-gradient(to right, #10b981 var(--progress, 0%), #3f3f46 var(--progress, 0%));
+}
+.light-theme input[type="range"]::-webkit-slider-runnable-track {
+  background: #d4d4d8;
+}
+.light-theme .seeker::-webkit-slider-runnable-track,
+.light-theme .volume-slider::-webkit-slider-runnable-track {
+  background: linear-gradient(to right, #10b981 var(--progress, 0%), #d4d4d8 var(--progress, 0%));
+}
+
+/* Select element */
+select {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* Prevent blue flash on tap in WebKit */
+* {
+  -webkit-tap-highlight-color: transparent;
 }

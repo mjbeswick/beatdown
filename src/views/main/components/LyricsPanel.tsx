@@ -53,11 +53,11 @@ export default function LyricsPanel({ isOpen, onClose }: Props) {
 
   return (
     <div
-      className={`absolute inset-y-0 right-0 w-72 flex flex-col bg-zinc-900/97 border-l border-zinc-700 z-20 transition-transform duration-300 ${
+      className={`absolute inset-y-0 right-0 w-72 flex flex-col bg-zinc-800/98 border-l border-zinc-700/60 z-20 transition-transform duration-300 ${
         isOpen ? 'translate-x-0' : 'translate-x-full'
       }`}
     >
-      <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-700 shrink-0">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-700/60 shrink-0">
         <span className="text-zinc-300 text-sm font-medium">Lyrics</span>
         <button
           onClick={onClose}

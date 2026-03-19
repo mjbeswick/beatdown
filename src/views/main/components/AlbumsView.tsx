@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useUnit } from 'effector-react';
 import { Disc3, Play, ChevronDown, ChevronRight, Music2 } from 'lucide-react';
-import { $downloads } from '../stores/downloads';
+import { $downloads, $search } from '../stores/downloads';
 import { $focusedAlbum } from '../stores/nav';
 import { playPlaylist } from '../stores/player';
 import TrackRow from './TrackRow';
@@ -9,12 +9,16 @@ import TrackRow from './TrackRow';
 export default function AlbumsView() {
   const downloads = useUnit($downloads);
   const focusedAlbum = useUnit($focusedAlbum);
+  const search = useUnit($search);
   const [expanded, setExpanded] = useState<Set<string>>(
     focusedAlbum ? new Set([focusedAlbum]) : new Set()
   );
 
-  // Albums = downloads with multiple tracks (album/playlist types with cover art)
-  const albums = downloads.filter((d) => d.tracks.length > 0);
+  // Albums = downloads with multiple tracks, optionally filtered by name
+  const q = search.trim().toLowerCase();
+  const albums = downloads
+    .filter((d) => d.tracks.length > 0)
+    .filter((d) => !q || d.name.toLowerCase().includes(q));
 
   if (albums.length === 0) {
     return (
@@ -38,7 +42,7 @@ export default function AlbumsView() {
 
   return (
     <main className="flex-1 overflow-y-auto overflow-x-hidden">
-      <div className="sticky top-0 z-10 bg-zinc-800/95 backdrop-blur border-b border-zinc-700 flex items-center px-4 py-1.5 text-xs text-zinc-600 font-medium uppercase tracking-wide select-none">
+      <div className="sticky top-0 z-10 bg-zinc-800/60 backdrop-blur border-b border-zinc-700/60 flex items-center px-4 py-1.5 text-xs text-zinc-500 font-medium select-none">
         <div className="flex-1">Album / Playlist</div>
         <div className="w-20 text-right">Tracks</div>
       </div>

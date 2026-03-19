@@ -7,12 +7,13 @@ import * as os from 'os';
 import axios from 'axios';
 import type { AudioFormat, QualityPreset, SpotifyTrack } from '../../shared/types';
 import { logger } from '../logger';
+import { paths } from './paths';
 
 const execAsync = promisify(exec);
 
-export const OUTPUT_BASE = path.join(os.homedir(), 'Music', 'Reel');
-export const LIBRARY_BASE = path.join(OUTPUT_BASE, 'Library');
-export const PLAYLISTS_DIR = path.join(OUTPUT_BASE, 'Playlists');
+/** @deprecated use paths.libraryDir / paths.playlistsDir directly */
+export const LIBRARY_BASE = { toString() { return paths.libraryDir; } } as unknown as string;
+export const PLAYLISTS_DIR = { toString() { return paths.playlistsDir; } } as unknown as string;
 
 export interface DownloadProgress {
   percent: number;
@@ -40,7 +41,7 @@ export function sanitizeFilename(name: string): string {
 }
 
 export function getArtistDir(artist: string): string {
-  return path.join(LIBRARY_BASE, sanitizeFilename(artist.split(',')[0].trim()));
+  return path.join(paths.libraryDir, sanitizeFilename(artist.split(',')[0].trim()));
 }
 
 const AUDIO_EXTS = ['.mp3', '.m4a', '.flac', '.wav', '.opus', '.ogg', '.aac'];

@@ -1,5 +1,6 @@
 import { createStore, createEvent, createEffect, combine } from 'effector';
 import { rpc } from '../rpc';
+import { navChanged } from './nav';
 import type { DownloadItem, AddDownloadParams, SpotifyContent } from '../../../shared/types';
 
 export type FilterType = 'all' | 'active' | 'done' | 'error';
@@ -92,7 +93,9 @@ export const $downloads = createStore<DownloadItem[]>([])
   .on(loadAllFx.doneData, (_, items) => (items ? items : []));
 
 export const $filter = createStore<FilterType>('all').on(filterChanged, (_, f) => f);
-export const $search = createStore<string>('').on(searchChanged, (_, s) => s);
+export const $search = createStore<string>('')
+  .on(searchChanged, (_, s) => s)
+  .reset(navChanged);
 
 export const $expandedRows = createStore<Set<string>>(new Set()).on(
   rowToggled,

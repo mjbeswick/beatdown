@@ -8,7 +8,7 @@ export default function PlaylistsView() {
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Column labels */}
-      <div className="shrink-0 bg-zinc-800/95 border-b border-zinc-700 flex items-center px-3 py-1.5 text-xs text-zinc-600 font-medium uppercase tracking-wide select-none">
+      <div className="shrink-0 bg-zinc-800/60 border-b border-zinc-700/60 flex items-center px-3 py-1.5 text-xs text-zinc-500 font-medium select-none">
         <div className="w-5 shrink-0" />
         <div className="w-9 shrink-0" />
         <div className="flex-1 min-w-0">Name</div>

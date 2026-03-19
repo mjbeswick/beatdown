@@ -9,7 +9,8 @@ import type {
   DownloadStatus,
 } from '../../shared/types';
 import { logger } from '../logger';
-import { PLAYLISTS_DIR, LIBRARY_BASE, sanitizeFilename } from './downloader';
+import { sanitizeFilename } from './downloader';
+import { paths } from './paths';
 
 function escPipe(s: string): string {
   return s.replace(/\|/g, '\\|');
@@ -39,7 +40,7 @@ function splitPipeEscaped(s: string): string[] {
 
 /** Make a relative path from a Playlists/ .m3u to a Library/ audio file. */
 function toRelativePath(filePath: string): string {
-  return path.relative(PLAYLISTS_DIR, filePath);
+  return path.relative(paths.playlistsDir, filePath);
 }
 
 /** Resolve a relative path stored in .m3u back to absolute. */
@@ -49,9 +50,9 @@ function toAbsolutePath(stored: string, m3uPath: string): string {
 }
 
 export function savePlaylist(item: DownloadItem): void {
-  fs.mkdirSync(PLAYLISTS_DIR, { recursive: true });
+  fs.mkdirSync(paths.playlistsDir, { recursive: true });
   const fileName = sanitizeFilename(item.name) + '.m3u';
-  const filePath = path.join(PLAYLISTS_DIR, fileName);
+  const filePath = path.join(paths.playlistsDir, fileName);
   const lines: string[] = [];
 
   lines.push('#EXTM3U');
@@ -98,7 +99,7 @@ export function savePlaylist(item: DownloadItem): void {
 
 export function deletePlaylist(item: DownloadItem): void {
   const fileName = sanitizeFilename(item.name) + '.m3u';
-  const filePath = path.join(PLAYLISTS_DIR, fileName);
+  const filePath = path.join(paths.playlistsDir, fileName);
   try {
     if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
   } catch (err) {
@@ -109,17 +110,17 @@ export function deletePlaylist(item: DownloadItem): void {
 export function loadAllPlaylists(): DownloadItem[] {
   const items: DownloadItem[] = [];
 
-  if (!fs.existsSync(PLAYLISTS_DIR)) return items;
+  if (!fs.existsSync(paths.playlistsDir)) return items;
 
   let files: string[];
   try {
-    files = fs.readdirSync(PLAYLISTS_DIR).filter((f) => f.endsWith('.m3u'));
+    files = fs.readdirSync(paths.playlistsDir).filter((f) => f.endsWith('.m3u'));
   } catch {
     return items;
   }
 
   for (const file of files) {
-    const m3uPath = path.join(PLAYLISTS_DIR, file);
+    const m3uPath = path.join(paths.playlistsDir, file);
     try {
       const item = parseM3U(m3uPath);
       if (item) items.push(item);
@@ -204,7 +205,7 @@ function parseM3U(filePath: string): DownloadItem | null {
   const name = path.basename(filePath, '.m3u');
 
   // outputDir is the Library dir (for backward compat), but files are under Library/{Artist}/
-  const outputDir = LIBRARY_BASE;
+  const outputDir = paths.libraryDir;
 
   const allTracks: TrackInfo[] = [];
 
