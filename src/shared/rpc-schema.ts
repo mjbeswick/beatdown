@@ -46,6 +46,7 @@ export interface ReelRPCSchema {
         response: ReelPaths | null;
       };
       'visualizer-presets:list': { params: undefined; response: VisualizerPresetCatalog };
+      'visualizer-presets:clear-folder': { params: undefined; response: ReelPaths };
       'visualizer-presets:get': {
         params: { id: string };
         response: Record<string, unknown> | null;

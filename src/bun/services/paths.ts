@@ -25,7 +25,9 @@ function load(): ReelPaths {
       libraryDir: parsed.libraryDir || path.join(DEFAULT_BASE, 'Library'),
       playlistsDir: parsed.playlistsDir || path.join(DEFAULT_BASE, 'Playlists'),
       visualizerPresetsDir:
-        parsed.visualizerPresetsDir || path.join(DEFAULT_BASE, 'Visualizer Presets'),
+        typeof parsed.visualizerPresetsDir === 'string'
+          ? parsed.visualizerPresetsDir
+          : path.join(DEFAULT_BASE, 'Visualizer Presets'),
     };
   } catch {
     return {
@@ -65,6 +67,11 @@ export const paths = {
 
   setVisualizerPresetsDir(dir: string) {
     current.visualizerPresetsDir = dir;
+    save(current);
+  },
+
+  clearVisualizerPresetsDir() {
+    current.visualizerPresetsDir = '';
     save(current);
   },
 };

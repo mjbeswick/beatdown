@@ -32,7 +32,9 @@ function extractTracksFromJson(obj: unknown, tracks: SpotifyTrack[] = []): Spoti
   if (o['type'] === 'track' && typeof o['name'] === 'string') {
     const artists = o['artists'] as Array<{ name: string }> | undefined;
     if (artists?.length) {
-      tracks.push({ title: o['name'] as string, artist: artists.map((a) => a.name).join(', ') });
+      const albumObj = o['album'] as Record<string, unknown> | undefined;
+      const album = typeof albumObj?.['name'] === 'string' ? albumObj['name'] : undefined;
+      tracks.push({ title: o['name'] as string, artist: artists.map((a) => a.name).join(', '), album });
       return tracks;
     }
   }

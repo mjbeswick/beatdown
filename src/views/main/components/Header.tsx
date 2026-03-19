@@ -6,18 +6,22 @@ import { $nav, navChanged } from '../stores/nav';
 import type { NavSection } from '../stores/nav';
 
 const NAV_TITLES: Record<NavSection, string> = {
+  nowplaying: 'Now Playing',
   playlists: 'Playlists',
   albums: 'Albums',
   artists: 'Artists',
   genres: 'Genres',
+  favourites: 'Favourites',
   visualizer: 'Visualizer',
   settings: 'Settings',
 };
 
 const NAV_PLACEHOLDER: Partial<Record<NavSection, string>> = {
+  nowplaying: 'Filter queue by title…',
   playlists: 'Search or paste a Spotify URL…',
   albums: 'Filter albums…',
   artists: 'Filter artists…',
+  favourites: 'Filter favourites…',
 };
 
 function isUrl(value: string) {

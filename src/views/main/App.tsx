@@ -6,8 +6,10 @@ import PlaylistsView from './components/PlaylistsView';
 import AlbumsView from './components/AlbumsView';
 import ArtistsView from './components/ArtistsView';
 import GenresView from './components/GenresView';
+import FavouritesView from './components/FavouritesView';
 import VisualizerView from './components/VisualizerView';
 import SettingsView from './components/SettingsView';
+import NowPlayingView from './components/NowPlayingView';
 import PlayerPanel from './components/PlayerPanel';
 import LyricsPanel from './components/LyricsPanel';
 import StatusBar from './components/StatusBar';
@@ -84,10 +86,12 @@ export default function App() {
         <Sidebar />
 
         <div className="flex-1 flex overflow-hidden relative">
+          {nav === 'nowplaying' && <NowPlayingView />}
           {nav === 'playlists' && <PlaylistsView />}
           {nav === 'albums' && <AlbumsView />}
           {nav === 'artists' && <ArtistsView />}
           {nav === 'genres' && <GenresView />}
+          {nav === 'favourites' && <FavouritesView />}
           {nav === 'visualizer' && <VisualizerView />}
           {nav === 'settings' && <SettingsView />}
 

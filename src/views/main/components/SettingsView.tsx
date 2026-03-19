@@ -17,6 +17,8 @@ import {
   setVisualizerMeshDensity,
   setVisualizerPresetName,
   setVisualizerQuality,
+  resetVisualizerFavorites,
+  resetVisualizerHidden,
 } from '../stores/visualizer';
 import type { VisualizerFps } from '../stores/visualizer';
 import {
@@ -55,6 +57,7 @@ const VISUALIZER_QUALITIES = [
   { value: 'performance', label: 'Performance' },
   { value: 'balanced', label: 'Balanced' },
   { value: 'detail', label: 'High Detail' },
+  { value: 'ultra', label: 'Ultra' },
 ] as const;
 
 const VISUALIZER_MESH_DENSITIES = [
@@ -280,20 +283,36 @@ export default function SettingsView() {
               <FolderOpen size={13} className="text-zinc-500 shrink-0" />
               <div className="min-w-0">
                 <span className="text-zinc-300 text-sm block">Custom preset folder</span>
-                <code className="text-zinc-500 text-[11px] font-mono truncate block max-w-[200px]">
+                <code className="text-zinc-500 text-[11px] font-mono truncate block max-w-[160px]">
                   {reelPaths?.visualizerPresetsDir
                     ? shortenPath(reelPaths.visualizerPresetsDir)
-                    : '…'}
+                    : 'None'}
                 </code>
               </div>
             </div>
-            <button
-              onClick={() => browsePath('visualizerPresets')}
-              disabled={browsing === 'visualizerPresets'}
-              className="shrink-0 ml-2 text-xs text-zinc-400 hover:text-zinc-200 bg-zinc-700/60 border border-zinc-600/50 rounded-lg px-2.5 py-1 transition-colors disabled:opacity-50"
-            >
-              {browsing === 'visualizerPresets' ? '…' : 'Change'}
-            </button>
+            <div className="flex items-center gap-1.5 shrink-0 ml-2">
+              {reelPaths?.visualizerPresetsDir && (
+                <button
+                  onClick={async () => {
+                    const updated = await rpc.proxy.request['visualizer-presets:clear-folder'](undefined as never).catch(() => null);
+                    if (updated) {
+                      invalidateVisualizerPresetCatalog();
+                      setReelPaths(updated);
+                    }
+                  }}
+                  className="text-xs text-zinc-400 hover:text-zinc-200 bg-zinc-700/60 border border-zinc-600/50 rounded-lg px-2.5 py-1 transition-colors"
+                >
+                  Clear
+                </button>
+              )}
+              <button
+                onClick={() => browsePath('visualizerPresets')}
+                disabled={browsing === 'visualizerPresets'}
+                className="text-xs text-zinc-400 hover:text-zinc-200 bg-zinc-700/60 border border-zinc-600/50 rounded-lg px-2.5 py-1 transition-colors disabled:opacity-50"
+              >
+                {browsing === 'visualizerPresets' ? '…' : 'Change'}
+              </button>
+            </div>
           </div>
 
           <div className="flex items-center justify-between px-4 py-2.5 border-t border-zinc-700/40">
@@ -364,11 +383,31 @@ export default function SettingsView() {
             />
           </div>
 
-          <div className="px-4 py-2.5 border-t border-zinc-700/40 flex items-center justify-between text-xs">
-            <span className="text-zinc-500">Favorites / Hidden / Visible</span>
-            <span className="text-zinc-300 font-mono">
-              {favoritePresetCount} / {hiddenPresetCount} / {visiblePresetCount}
-            </span>
+          <div className="px-4 py-2.5 border-t border-zinc-700/40 flex items-center justify-between text-xs gap-2">
+            <span className="text-zinc-500 shrink-0">Favorites / Hidden / Visible</span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-zinc-300 font-mono">
+                {favoritePresetCount} / {hiddenPresetCount} / {visiblePresetCount}
+              </span>
+              {favoritePresetCount > 0 && (
+                <button
+                  onClick={() => resetVisualizerFavorites()}
+                  className="text-zinc-500 hover:text-zinc-300 bg-zinc-700/60 border border-zinc-600/50 rounded px-1.5 py-0.5 transition-colors text-[10px]"
+                  title="Clear all favorites"
+                >
+                  Clear favorites
+                </button>
+              )}
+              {hiddenPresetCount > 0 && (
+                <button
+                  onClick={() => resetVisualizerHidden()}
+                  className="text-zinc-500 hover:text-zinc-300 bg-zinc-700/60 border border-zinc-600/50 rounded px-1.5 py-0.5 transition-colors text-[10px]"
+                  title="Unhide all hidden presets"
+                >
+                  Unhide all
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="px-4 py-2.5 border-t border-zinc-700/40 flex items-center justify-between text-xs">

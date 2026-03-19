@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { useUnit } from 'effector-react';
-import { Mic2, Play, ChevronRight, ChevronDown } from 'lucide-react';
+import { Mic2, Play } from 'lucide-react';
 import { $downloads, $search } from '../stores/downloads';
 import { $focusedArtist } from '../stores/nav';
-import { playPlaylist, playTrack } from '../stores/player';
+import { playPlaylist } from '../stores/player';
 import TrackRow from './TrackRow';
 import type { TrackInfo } from '../../../shared/types';
 
@@ -11,9 +11,6 @@ export default function ArtistsView() {
   const downloads = useUnit($downloads);
   const focusedArtist = useUnit($focusedArtist);
   const search = useUnit($search);
-  const [expanded, setExpanded] = useState<Set<string>>(
-    focusedArtist ? new Set([focusedArtist]) : new Set()
-  );
 
   const artistMap = new Map<string, Array<{ track: TrackInfo; downloadId: string; coverArt?: string; albumName: string }>>();
   for (const item of downloads) {
@@ -35,6 +32,10 @@ export default function ArtistsView() {
     .filter(([artist]) => !q || artist.toLowerCase().includes(q))
     .sort((a, b) => a[0].localeCompare(b[0]));
 
+  const [selectedArtist, setSelectedArtist] = useState<string | null>(focusedArtist ?? null);
+  const resolvedArtist = (selectedArtist && artistMap.has(selectedArtist) ? selectedArtist : artists[0]?.[0]) ?? null;
+  const selectedTracks = resolvedArtist ? (artistMap.get(resolvedArtist) ?? []) : [];
+
   if (artists.length === 0) {
     return (
       <main className="flex-1 flex items-center justify-center">
@@ -47,69 +48,96 @@ export default function ArtistsView() {
     );
   }
 
-  const toggle = (artist: string) => {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      next.has(artist) ? next.delete(artist) : next.add(artist);
-      return next;
-    });
-  };
+  // Group selected artist's tracks by album
+  const albumGroups = new Map<string, typeof selectedTracks>();
+  for (const t of selectedTracks) {
+    if (!albumGroups.has(t.albumName)) albumGroups.set(t.albumName, []);
+    albumGroups.get(t.albumName)!.push(t);
+  }
 
   return (
-    <main className="flex-1 overflow-y-auto overflow-x-hidden">
-      <div className="sticky top-0 z-10 bg-zinc-800/60 backdrop-blur border-b border-zinc-700/60 flex items-center px-4 py-1.5 text-xs text-zinc-500 font-medium select-none">
-        <div className="w-5 shrink-0" />
-        <div className="flex-1">Artist</div>
-        <div className="w-20 text-right">Tracks</div>
+    <main className="flex-1 flex overflow-hidden">
+      {/* Left: artist list */}
+      <div className="w-52 shrink-0 border-r border-zinc-800 flex flex-col overflow-hidden">
+        <div className="bg-zinc-800/60 backdrop-blur border-b border-zinc-700/60 px-3 py-1.5 text-xs text-zinc-500 font-medium select-none flex items-center justify-between shrink-0">
+          <span>Artist</span>
+          <span>Tracks</span>
+        </div>
+        <div className="flex-1 overflow-y-auto overflow-x-hidden">
+          {artists.map(([artist, tracks]) => {
+            const isSelected = artist === resolvedArtist;
+            return (
+              <div
+                key={artist}
+                onClick={() => setSelectedArtist(artist)}
+                className={`flex items-center gap-2.5 px-3 py-2 cursor-pointer border-b border-zinc-800/60 last:border-b-0 transition-colors ${
+                  isSelected ? 'bg-zinc-700/50' : 'hover:bg-zinc-800/30'
+                }`}
+              >
+                <div className="w-7 h-7 rounded-full bg-zinc-700 flex items-center justify-center shrink-0 text-zinc-400 text-xs font-medium">
+                  {artist.charAt(0).toUpperCase()}
+                </div>
+                <span className="flex-1 min-w-0 text-zinc-300 text-xs truncate">{artist}</span>
+                <span className="text-zinc-500 text-xs font-mono tabular-nums shrink-0">{tracks.length}</span>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
-      {artists.map(([artist, tracks]) => {
-        const isExpanded = expanded.has(artist);
-        return (
-          <div key={artist} className="border-b border-zinc-800 last:border-b-0">
-            <div
-              className="flex items-center gap-3 px-4 py-2 hover:bg-zinc-800/30 transition-colors cursor-pointer group"
-              onClick={() => toggle(artist)}
-            >
-              <div className="w-5 shrink-0 flex items-center justify-center text-zinc-600">
-                {isExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+      {/* Right: tracks for selected artist */}
+      {resolvedArtist && (
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Artist header */}
+          <div className="shrink-0 flex items-center gap-4 px-5 py-3 border-b border-zinc-800 bg-zinc-900/40">
+            <div className="w-12 h-12 rounded-full bg-zinc-700 flex items-center justify-center shrink-0 text-zinc-300 text-xl font-semibold">
+              {resolvedArtist.charAt(0).toUpperCase()}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-zinc-200 font-semibold text-sm truncate">{resolvedArtist}</div>
+              <div className="text-zinc-500 text-xs mt-0.5">
+                {selectedTracks.length} tracks · {albumGroups.size} {albumGroups.size === 1 ? 'album' : 'albums'}
               </div>
-              <div className="w-8 h-8 rounded-full bg-zinc-700 flex items-center justify-center shrink-0 text-zinc-400 text-xs font-medium">
-                {artist.charAt(0).toUpperCase()}
-              </div>
-              <span className="flex-1 text-zinc-300 text-sm">{artist}</span>
+            </div>
+            {selectedTracks.length > 0 && (
               <button
-                onClick={(e) => {
-                  e.stopPropagation();
+                onClick={() =>
                   playPlaylist({
-                    tracks: tracks.map((t) => ({ track: t.track, downloadId: t.downloadId, coverArt: t.coverArt, albumName: t.albumName })),
+                    tracks: selectedTracks.map((t) => ({ track: t.track, downloadId: t.downloadId, coverArt: t.coverArt, albumName: t.albumName })),
                     startIndex: 0,
-                  });
-                }}
-                className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 text-xs text-zinc-400 hover:text-emerald-400"
+                  })
+                }
+                className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-emerald-400 transition-colors shrink-0"
               >
-                <Play size={11} className="fill-current" />
+                <Play size={13} className="fill-current" />
                 Play all
               </button>
-              <span className="text-zinc-500 text-xs font-mono tabular-nums w-20 text-right">{tracks.length}</span>
-            </div>
-            {isExpanded && (
-              <div className="bg-zinc-900/60">
-                {tracks.map(({ track, downloadId, coverArt, albumName }) => (
+            )}
+          </div>
+
+          {/* Tracks grouped by album */}
+          <div className="flex-1 overflow-y-auto overflow-x-hidden">
+            {[...albumGroups.entries()].map(([albumName, albumTracks]) => (
+              <div key={albumName}>
+                <div className="sticky top-0 bg-zinc-800/60 backdrop-blur border-b border-zinc-700/60 flex items-center justify-between px-4 py-1.5 text-xs text-zinc-500 font-medium select-none z-10">
+                  <span>{albumName}</span>
+                  <span>{albumTracks.length}</span>
+                </div>
+                {albumTracks.map(({ track, downloadId, coverArt, albumName: aName }) => (
                   <TrackRow
                     key={track.id}
                     track={track}
                     downloadId={downloadId}
                     coverArt={coverArt}
-                    albumName={albumName}
-                    allTracks={tracks}
+                    albumName={aName}
+                    allTracks={selectedTracks.map((t) => ({ track: t.track, downloadId: t.downloadId, coverArt: t.coverArt, albumName: t.albumName }))}
                   />
                 ))}
               </div>
-            )}
+            ))}
           </div>
-        );
-      })}
+        </div>
+      )}
     </main>
   );
 }

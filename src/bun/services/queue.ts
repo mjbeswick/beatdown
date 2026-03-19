@@ -89,6 +89,7 @@ export class DownloadQueue extends EventEmitter {
       index: i,
       title: t.title,
       artist: t.artist,
+      album: t.album,
       status: 'queued' as TrackStatus,
       progress: 0,
     }));
@@ -389,7 +390,7 @@ export class DownloadQueue extends EventEmitter {
           }
         },
         signal,
-        item.type === 'album' ? item.name : undefined
+        track.album ?? (item.type === 'album' ? item.name : undefined)
       );
 
       this.mutateTrack(downloadId, track.id, {

@@ -4,6 +4,7 @@ import {
   AudioWaveform,
   ChevronLeft,
   ChevronRight,
+  Eye,
   EyeOff,
   Heart,
   Maximize,
@@ -15,10 +16,15 @@ import {
   $visualizerSettings,
   setVisualizerAutoCycle,
   setVisualizerBlendSeconds,
+  setVisualizerCycleOrder,
   setVisualizerCycleSeconds,
   setVisualizerFps,
+  setVisualizerOnlyFavourites,
   setVisualizerPresetPreference,
   setVisualizerPresetName,
+  setVisualizerShowTrackChangeOverlay,
+  setVisualizerTrackChangeOverlaySeconds,
+  setVisualizerChangePresetOnTrackChange,
 } from '../stores/visualizer';
 import type { VisualizerFps } from '../stores/visualizer';
 import { getAnalyserNode, getAudioContext } from '../audio/engine';
@@ -57,6 +63,16 @@ export default function VisualizerView() {
   const fxaaRef = useRef(visualizerSettings.fxaa);
   const meshDensityRef = useRef(visualizerSettings.meshDensity);
   const fpsRef = useRef(visualizerSettings.fps);
+  const presetPreferencesRef = useRef(visualizerSettings.presetPreferences);
+  const cycleOrderRef = useRef(visualizerSettings.cycleOrder);
+  const onlyFavouritesRef = useRef(visualizerSettings.onlyFavourites);
+  const showTrackChangeOverlayRef = useRef(visualizerSettings.showTrackChangeOverlay);
+  const trackChangeOverlaySecondsRef = useRef(visualizerSettings.trackChangeOverlaySeconds);
+  const changePresetOnTrackChangeRef = useRef(visualizerSettings.changePresetOnTrackChange);
+
+  // Track-change overlay
+  const trackOverlayTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const prevTrackIdRef = useRef<string | null>(null);
 
   // React state for rendering
   const [presetNames, setPresetNames] = useState<string[]>([]);
@@ -64,6 +80,7 @@ export default function VisualizerView() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
   const [showOverlay, setShowOverlay] = useState(true);
+  const [showTrackOverlay, setShowTrackOverlay] = useState(false);
 
   const butterchurn = getButterchurnLibrary();
   const currentPresetName =
@@ -83,7 +100,12 @@ export default function VisualizerView() {
     const preset = await loadVisualizerPresetById(presetName);
     if (!preset || !vizRef.current || loadSeq !== presetLoadSeqRef.current) return;
 
-    await Promise.resolve(vizRef.current.loadPreset(preset, blendSecsRef.current));
+    try {
+      await vizRef.current.loadPreset(preset, blendSecsRef.current);
+    } catch (err) {
+      console.error(`[visualizer] Failed to load preset "${presetName}":`, err);
+      return;
+    }
     if (loadSeq !== presetLoadSeqRef.current) return;
 
     presetIdxRef.current = i;
@@ -100,14 +122,23 @@ export default function VisualizerView() {
     if (!vizRef.current || !canvasRef.current) return;
 
     const canvas = canvasRef.current;
+    const w = canvas.offsetWidth || 800;
+    const h = canvas.offsetHeight || 600;
+
+    // Keep the canvas pixel buffer in sync with its display size so butterchurn's
+    // drawImage call fills the entire output rather than being clipped to the
+    // default 300×150 buffer (which then gets stretched / zoomed by CSS).
+    canvas.width = w;
+    canvas.height = h;
+
     const renderOptions = getVisualizerRenderOptions(
       {
         quality: qualityRef.current,
         fxaa: fxaaRef.current,
         meshDensity: meshDensityRef.current,
       },
-      canvas.offsetWidth || 800,
-      canvas.offsetHeight || 600
+      w,
+      h
     );
 
     vizRef.current.setOutputAA(renderOptions.outputFXAA);
@@ -117,6 +148,7 @@ export default function VisualizerView() {
   const teardownVisualizer = () => {
     clearTimeout(presetTimerRef.current);
     clearTimeout(overlayTimerRef.current);
+    clearTimeout(trackOverlayTimerRef.current);
     cancelAnimationFrame(rafRef.current);
     resizeObserverRef.current?.disconnect();
     resizeObserverRef.current = null;
@@ -149,7 +181,11 @@ export default function VisualizerView() {
         const nextPresetName = getNextAutoCyclePresetName(
           presetNamesRef.current,
           activePresetName,
-          visualizerSettings
+          {
+            presetPreferences: presetPreferencesRef.current,
+            cycleOrder: cycleOrderRef.current,
+            onlyFavourites: onlyFavouritesRef.current,
+          }
         );
         if (nextPresetName && nextPresetName !== activePresetName) {
           await loadPresetByName(nextPresetName);
@@ -230,10 +266,49 @@ export default function VisualizerView() {
   };
 
   useEffect(() => {
-    const onFsChange = () => setIsFullscreen(!!document.fullscreenElement);
+    const onFsChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+      // The fullscreen layout may not have finished when this event fires, so
+      // defer the resize by one frame to get accurate offsetWidth/offsetHeight.
+      requestAnimationFrame(() => applyRendererSettings());
+    };
     document.addEventListener('fullscreenchange', onFsChange);
     return () => document.removeEventListener('fullscreenchange', onFsChange);
   }, []);
+
+  // Track-change: show overlay and/or cycle preset
+  useEffect(() => {
+    const currentTrackId = player.current?.track.id ?? null;
+    const isNewTrack = currentTrackId !== null && currentTrackId !== prevTrackIdRef.current;
+    prevTrackIdRef.current = currentTrackId;
+
+    if (!isNewTrack) return;
+
+    if (showTrackChangeOverlayRef.current) {
+      clearTimeout(trackOverlayTimerRef.current);
+      setShowTrackOverlay(true);
+      trackOverlayTimerRef.current = setTimeout(() => {
+        setShowTrackOverlay(false);
+      }, trackChangeOverlaySecondsRef.current * 1000);
+    }
+
+    if (changePresetOnTrackChangeRef.current && vizRef.current && presetNamesRef.current.length > 0) {
+      const activePresetName = presetNamesRef.current[presetIdxRef.current] ?? presetNameRef.current;
+      const nextPresetName = getNextAutoCyclePresetName(
+        presetNamesRef.current,
+        activePresetName,
+        {
+          presetPreferences: presetPreferencesRef.current,
+          cycleOrder: cycleOrderRef.current,
+          onlyFavourites: onlyFavouritesRef.current,
+        }
+      );
+      if (nextPresetName && nextPresetName !== activePresetName) {
+        void loadPresetByName(nextPresetName);
+        scheduleAutoCycle();
+      }
+    }
+  }, [player.current?.track.id]);
 
   useEffect(() => {
     revealOverlay();
@@ -287,6 +362,12 @@ export default function VisualizerView() {
     fxaaRef.current = visualizerSettings.fxaa;
     meshDensityRef.current = visualizerSettings.meshDensity;
     fpsRef.current = visualizerSettings.fps;
+    presetPreferencesRef.current = visualizerSettings.presetPreferences;
+    cycleOrderRef.current = visualizerSettings.cycleOrder;
+    onlyFavouritesRef.current = visualizerSettings.onlyFavourites;
+    showTrackChangeOverlayRef.current = visualizerSettings.showTrackChangeOverlay;
+    trackChangeOverlaySecondsRef.current = visualizerSettings.trackChangeOverlaySeconds;
+    changePresetOnTrackChangeRef.current = visualizerSettings.changePresetOnTrackChange;
   }, [
     visualizerSettings.presetName,
     visualizerSettings.autoCycle,
@@ -296,6 +377,12 @@ export default function VisualizerView() {
     visualizerSettings.fxaa,
     visualizerSettings.meshDensity,
     visualizerSettings.fps,
+    visualizerSettings.presetPreferences,
+    visualizerSettings.cycleOrder,
+    visualizerSettings.onlyFavourites,
+    visualizerSettings.showTrackChangeOverlay,
+    visualizerSettings.trackChangeOverlaySeconds,
+    visualizerSettings.changePresetOnTrackChange,
   ]);
 
   useEffect(() => {
@@ -304,12 +391,55 @@ export default function VisualizerView() {
     visualizerSettings.autoCycle,
     visualizerSettings.cycleSeconds,
     visualizerSettings.cycleOrder,
+    visualizerSettings.onlyFavourites,
     visualizerSettings.presetPreferences,
   ]);
 
   useEffect(() => {
-    if (vizRef.current) applyRendererSettings();
-  }, [visualizerSettings.quality, visualizerSettings.fxaa, visualizerSettings.meshDensity]);
+    if (vizRef.current) vizRef.current.setOutputAA(visualizerSettings.fxaa);
+  }, [visualizerSettings.fxaa]);
+
+  // Butterchurn sets the warp mesh dimensions at creation time only — setRendererSize
+  // cannot change tessellation. Recreate the renderer when quality or mesh density
+  // changes so the new settings are fully applied.
+  useEffect(() => {
+    if (!butterchurn || !vizRef.current || !canvasRef.current) return;
+    const audioCtx = getAudioContext();
+    const analyser = getAnalyserNode();
+    if (!audioCtx || !analyser) { applyRendererSettings(); return; }
+
+    cancelAnimationFrame(rafRef.current);
+    resizeObserverRef.current?.disconnect();
+
+    const canvas = canvasRef.current;
+    const renderOptions = getVisualizerRenderOptions(
+      { quality: qualityRef.current, fxaa: fxaaRef.current, meshDensity: meshDensityRef.current },
+      canvas.offsetWidth || 800,
+      canvas.offsetHeight || 600
+    );
+
+    vizRef.current = butterchurn.createVisualizer(audioCtx, canvas, renderOptions);
+    vizRef.current.connectAudio(analyser);
+    vizRef.current.setOutputAA(renderOptions.outputFXAA);
+    void doLoadPreset(presetIdxRef.current, false);
+
+    let lastFrameTime = 0;
+    const render = (now: number) => {
+      const targetFps = fpsRef.current;
+      const minInterval = targetFps > 0 ? 1000 / targetFps : 0;
+      if (targetFps === 0 || now - lastFrameTime >= minInterval) {
+        if (vizRef.current) vizRef.current.render();
+        lastFrameTime = now;
+      }
+      rafRef.current = requestAnimationFrame(render);
+    };
+    rafRef.current = requestAnimationFrame(render);
+
+    resizeObserverRef.current = new ResizeObserver(() => {
+      if (vizRef.current) applyRendererSettings();
+    });
+    resizeObserverRef.current.observe(canvas);
+  }, [visualizerSettings.quality, visualizerSettings.meshDensity]);
 
   useEffect(() => {
     const names = presetNamesRef.current;
@@ -436,6 +566,32 @@ export default function VisualizerView() {
         </div>
       )}
 
+      {/* Track-change info overlay */}
+      {player.current && (
+        <div
+          className={`absolute top-6 left-6 flex items-center gap-3 rounded-xl px-4 py-3 shadow-2xl pointer-events-none transition-all duration-500 ${
+            showTrackOverlay ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2'
+          }`}
+          style={{ background: 'rgba(10,10,12,0.82)', border: '1px solid rgba(255,255,255,0.10)', backdropFilter: 'blur(12px)', maxWidth: '320px' }}
+        >
+          {player.current.coverArt && (
+            <img
+              src={player.current.coverArt}
+              alt="cover"
+              className="w-12 h-12 rounded-lg object-cover flex-shrink-0"
+              style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.5)' }}
+            />
+          )}
+          <div className="min-w-0">
+            <p className="text-white text-sm font-semibold truncate leading-tight">{player.current.track.title}</p>
+            <p className="text-white/60 text-xs truncate mt-0.5">{player.current.track.artist}</p>
+            {player.current.albumName && (
+              <p className="text-white/40 text-xs truncate mt-0.5">{player.current.albumName}</p>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Controls bar — visible on hover */}
       <div
         className={`absolute bottom-0 left-0 right-0 px-3 py-2 flex items-center gap-2 bg-gradient-to-t from-black/70 to-transparent transition-opacity duration-200 ${
@@ -462,9 +618,15 @@ export default function VisualizerView() {
           onChange={e => handleSelectPreset(Number(e.target.value))}
           className="flex-1 min-w-0 bg-black/50 text-white/80 text-xs rounded px-2 py-1 border border-white/10 truncate cursor-pointer"
         >
-          {presetNames.map((name, i) => (
-            <option key={name} value={i}>{getVisualizerPresetLabel(name)}</option>
-          ))}
+          {presetNames
+            .map((name, i) => ({ name, i }))
+            .filter(({ name }) =>
+              !visualizerSettings.onlyFavourites ||
+              getVisualizerPresetPreference(visualizerSettings, name) === 'favorite'
+            )
+            .map(({ name, i }) => (
+              <option key={name} value={i}>{getVisualizerPresetLabel(name)}</option>
+            ))}
         </select>
 
         <button
@@ -488,7 +650,7 @@ export default function VisualizerView() {
               : 'text-white/60 hover:text-white'
           }`}
         >
-          <EyeOff size={16} />
+          {currentPresetPreference === 'hidden' ? <Eye size={16} /> : <EyeOff size={16} />}
         </button>
 
         <button
@@ -519,6 +681,26 @@ export default function VisualizerView() {
               type="checkbox"
               checked={visualizerSettings.autoCycle}
               onChange={(e) => setVisualizerAutoCycle(e.target.checked)}
+              className="accent-violet-500"
+            />
+          </label>
+
+          <label className="flex items-center justify-between gap-2">
+            <span>Only favourites</span>
+            <input
+              type="checkbox"
+              checked={visualizerSettings.onlyFavourites}
+              onChange={(e) => setVisualizerOnlyFavourites(e.target.checked)}
+              className="accent-violet-500"
+            />
+          </label>
+
+          <label className="flex items-center justify-between gap-2">
+            <span>Randomize order</span>
+            <input
+              type="checkbox"
+              checked={visualizerSettings.cycleOrder === 'random'}
+              onChange={(e) => setVisualizerCycleOrder(e.target.checked ? 'random' : 'sequential')}
               className="accent-violet-500"
             />
           </label>
@@ -569,6 +751,47 @@ export default function VisualizerView() {
               className="accent-violet-500"
             />
           </label>
+
+          <div style={{borderTop:'1px solid rgba(255,255,255,0.08)', paddingTop:'8px'}}>
+            <p className="font-medium uppercase tracking-wider text-[10px] mb-2" style={{color:'rgba(255,255,255,0.6)'}}>Track Change</p>
+
+            <label className="flex items-center justify-between gap-2 mb-2">
+              <span>Show track info</span>
+              <input
+                type="checkbox"
+                checked={visualizerSettings.showTrackChangeOverlay}
+                onChange={(e) => setVisualizerShowTrackChangeOverlay(e.target.checked)}
+                className="accent-violet-500"
+              />
+            </label>
+
+            <label className="flex flex-col gap-1 mb-2">
+              <span className="flex justify-between">
+                <span style={{opacity: visualizerSettings.showTrackChangeOverlay ? 1 : 0.4}}>Info duration</span>
+                <span style={{color:'rgba(255,255,255,0.5)', opacity: visualizerSettings.showTrackChangeOverlay ? 1 : 0.4}}>{visualizerSettings.trackChangeOverlaySeconds}s</span>
+              </span>
+              <input
+                type="range"
+                min={2}
+                max={10}
+                step={1}
+                value={visualizerSettings.trackChangeOverlaySeconds}
+                disabled={!visualizerSettings.showTrackChangeOverlay}
+                onChange={(e) => setVisualizerTrackChangeOverlaySeconds(Number(e.target.value))}
+                className="accent-violet-500 disabled:opacity-40"
+              />
+            </label>
+
+            <label className="flex items-center justify-between gap-2">
+              <span>Change preset</span>
+              <input
+                type="checkbox"
+                checked={visualizerSettings.changePresetOnTrackChange}
+                onChange={(e) => setVisualizerChangePresetOnTrackChange(e.target.checked)}
+                className="accent-violet-500"
+              />
+            </label>
+          </div>
         </div>
       )}
     </main>

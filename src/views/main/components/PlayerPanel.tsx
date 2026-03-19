@@ -14,6 +14,7 @@ import {
   Mic2,
   Cast,
   Loader2,
+  Heart,
 } from 'lucide-react';
 import {
   $player,
@@ -27,6 +28,7 @@ import {
 } from '../stores/player';
 import { $cast, devicesDiscovered, discoveringStarted, deviceSelected } from '../stores/cast';
 import { navToAlbum, navToArtist } from '../stores/nav';
+import { $favourites, toggleFavourite } from '../stores/favourites';
 import { rpc } from '../rpc';
 // Ensure audio engine is initialized
 import '../audio/engine';
@@ -39,6 +41,7 @@ interface Props {
 export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
   const player = useUnit($player);
   const cast = useUnit($cast);
+  const favourites = useUnit($favourites);
   const [castOpen, setCastOpen] = useState(false);
   const castRef = useRef<HTMLDivElement>(null);
 
@@ -130,6 +133,20 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
             {player.current.track.artist}
           </button>
         </div>
+        <button
+          onClick={() => toggleFavourite(player.current!.track.id)}
+          className={`shrink-0 transition-colors ${
+            favourites.includes(player.current.track.id)
+              ? 'text-rose-500'
+              : 'text-zinc-600 hover:text-zinc-300'
+          }`}
+          title={favourites.includes(player.current.track.id) ? 'Remove from favourites' : 'Add to favourites'}
+        >
+          <Heart
+            size={13}
+            className={favourites.includes(player.current.track.id) ? 'fill-rose-500' : ''}
+          />
+        </button>
       </div>
 
       {/* Controls + seeker */}

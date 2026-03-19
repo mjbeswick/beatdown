@@ -1,6 +1,6 @@
 import { createEvent, createStore } from 'effector';
 
-export type VisualizerQualityPreset = 'performance' | 'balanced' | 'detail';
+export type VisualizerQualityPreset = 'performance' | 'balanced' | 'detail' | 'ultra';
 export type VisualizerMeshDensity = 'sparse' | 'standard' | 'dense' | 'extreme';
 export type VisualizerCycleOrder = 'random' | 'sequential';
 export type VisualizerPresetPreference = 'default' | 'favorite' | 'hidden';
@@ -15,12 +15,16 @@ export interface VisualizerSettings {
   fxaa: boolean;
   meshDensity: VisualizerMeshDensity;
   cycleOrder: VisualizerCycleOrder;
+  onlyFavourites: boolean;
   presetPreferences: Record<string, VisualizerPresetPreference>;
   fps: VisualizerFps;
+  showTrackChangeOverlay: boolean;
+  trackChangeOverlaySeconds: number;
+  changePresetOnTrackChange: boolean;
 }
 
 const STORAGE_KEY = 'reel:visualizer';
-const QUALITY_PRESETS: VisualizerQualityPreset[] = ['performance', 'balanced', 'detail'];
+const QUALITY_PRESETS: VisualizerQualityPreset[] = ['performance', 'balanced', 'detail', 'ultra'];
 const MESH_DENSITIES: VisualizerMeshDensity[] = ['sparse', 'standard', 'dense', 'extreme'];
 const CYCLE_ORDERS: VisualizerCycleOrder[] = ['random', 'sequential'];
 const PRESET_PREFERENCES: VisualizerPresetPreference[] = ['default', 'favorite', 'hidden'];
@@ -35,8 +39,12 @@ const DEFAULT_SETTINGS: VisualizerSettings = {
   fxaa: false,
   meshDensity: 'standard',
   cycleOrder: 'random',
+  onlyFavourites: false,
   presetPreferences: {},
   fps: 60,
+  showTrackChangeOverlay: true,
+  trackChangeOverlaySeconds: 4,
+  changePresetOnTrackChange: false,
 };
 
 function clamp(value: number, min: number, max: number): number {
@@ -84,10 +92,26 @@ function sanitizeSettings(input: Partial<VisualizerSettings> | null | undefined)
       typeof input?.cycleOrder === 'string' && CYCLE_ORDERS.includes(input.cycleOrder as VisualizerCycleOrder)
         ? (input.cycleOrder as VisualizerCycleOrder)
         : DEFAULT_SETTINGS.cycleOrder,
+    onlyFavourites: typeof input?.onlyFavourites === 'boolean' ? input.onlyFavourites : DEFAULT_SETTINGS.onlyFavourites,
     fps:
       typeof input?.fps === 'number' && FPS_VALUES.includes(input.fps as VisualizerFps)
         ? (input.fps as VisualizerFps)
         : DEFAULT_SETTINGS.fps,
+    showTrackChangeOverlay:
+      typeof input?.showTrackChangeOverlay === 'boolean'
+        ? input.showTrackChangeOverlay
+        : DEFAULT_SETTINGS.showTrackChangeOverlay,
+    trackChangeOverlaySeconds: clamp(
+      typeof input?.trackChangeOverlaySeconds === 'number'
+        ? input.trackChangeOverlaySeconds
+        : DEFAULT_SETTINGS.trackChangeOverlaySeconds,
+      2,
+      10
+    ),
+    changePresetOnTrackChange:
+      typeof input?.changePresetOnTrackChange === 'boolean'
+        ? input.changePresetOnTrackChange
+        : DEFAULT_SETTINGS.changePresetOnTrackChange,
     presetPreferences,
   };
 }
@@ -118,6 +142,8 @@ function applyPatch(
 }
 
 export const patchVisualizerSettings = createEvent<Partial<VisualizerSettings>>();
+export const resetVisualizerFavorites = createEvent();
+export const resetVisualizerHidden = createEvent();
 export const setVisualizerPresetName = createEvent<string>();
 export const setVisualizerAutoCycle = createEvent<boolean>();
 export const setVisualizerCycleSeconds = createEvent<number>();
@@ -126,11 +152,15 @@ export const setVisualizerQuality = createEvent<VisualizerQualityPreset>();
 export const setVisualizerFXAA = createEvent<boolean>();
 export const setVisualizerMeshDensity = createEvent<VisualizerMeshDensity>();
 export const setVisualizerCycleOrder = createEvent<VisualizerCycleOrder>();
+export const setVisualizerOnlyFavourites = createEvent<boolean>();
 export const setVisualizerFps = createEvent<VisualizerFps>();
 export const setVisualizerPresetPreference = createEvent<{
   presetName: string;
   preference: VisualizerPresetPreference;
 }>();
+export const setVisualizerShowTrackChangeOverlay = createEvent<boolean>();
+export const setVisualizerTrackChangeOverlaySeconds = createEvent<number>();
+export const setVisualizerChangePresetOnTrackChange = createEvent<boolean>();
 
 export const $visualizerSettings = createStore<VisualizerSettings>(loadSettings())
   .on(patchVisualizerSettings, (state, patch) => applyPatch(state, patch))
@@ -142,10 +172,26 @@ export const $visualizerSettings = createStore<VisualizerSettings>(loadSettings(
   .on(setVisualizerFXAA, (state, fxaa) => applyPatch(state, { fxaa }))
   .on(setVisualizerMeshDensity, (state, meshDensity) => applyPatch(state, { meshDensity }))
   .on(setVisualizerCycleOrder, (state, cycleOrder) => applyPatch(state, { cycleOrder }))
+  .on(setVisualizerOnlyFavourites, (state, onlyFavourites) => applyPatch(state, { onlyFavourites }))
   .on(setVisualizerFps, (state, fps) => applyPatch(state, { fps }))
+  .on(setVisualizerShowTrackChangeOverlay, (state, showTrackChangeOverlay) => applyPatch(state, { showTrackChangeOverlay }))
+  .on(setVisualizerTrackChangeOverlaySeconds, (state, trackChangeOverlaySeconds) => applyPatch(state, { trackChangeOverlaySeconds }))
+  .on(setVisualizerChangePresetOnTrackChange, (state, changePresetOnTrackChange) => applyPatch(state, { changePresetOnTrackChange }))
   .on(setVisualizerPresetPreference, (state, { presetName, preference }) => {
     const presetPreferences = { ...state.presetPreferences };
     if (preference === 'default') delete presetPreferences[presetName];
     else presetPreferences[presetName] = preference;
+    return applyPatch(state, { presetPreferences });
+  })
+  .on(resetVisualizerFavorites, (state) => {
+    const presetPreferences = Object.fromEntries(
+      Object.entries(state.presetPreferences).filter(([, v]) => v !== 'favorite')
+    ) as Record<string, VisualizerPresetPreference>;
+    return applyPatch(state, { presetPreferences });
+  })
+  .on(resetVisualizerHidden, (state) => {
+    const presetPreferences = Object.fromEntries(
+      Object.entries(state.presetPreferences).filter(([, v]) => v !== 'hidden')
+    ) as Record<string, VisualizerPresetPreference>;
     return applyPatch(state, { presetPreferences });
   });

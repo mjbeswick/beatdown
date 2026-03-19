@@ -1,6 +1,6 @@
 import { createStore, createEvent } from 'effector';
 
-export type NavSection = 'playlists' | 'albums' | 'artists' | 'genres' | 'visualizer' | 'settings';
+export type NavSection = 'nowplaying' | 'playlists' | 'albums' | 'artists' | 'genres' | 'favourites' | 'visualizer' | 'settings';
 
 export const navChanged = createEvent<NavSection>();
 export const navToAlbum = createEvent<string>();

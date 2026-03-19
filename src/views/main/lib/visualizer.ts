@@ -50,7 +50,7 @@ const QUALITY_CONFIG: Record<
   balanced: {
     meshWidth: 48,
     meshHeight: 36,
-    pixelRatio: 1.25,
+    pixelRatio: 2,
     textureRatio: 1,
   },
   detail: {
@@ -58,6 +58,12 @@ const QUALITY_CONFIG: Record<
     meshHeight: 48,
     pixelRatio: 2,
     textureRatio: 1,
+  },
+  ultra: {
+    meshWidth: 96,
+    meshHeight: 72,
+    pixelRatio: 2,
+    textureRatio: 1.5,
   },
 };
 
@@ -91,8 +97,8 @@ export function getVisualizerRenderOptions(
   return {
     width,
     height,
-    meshWidth: clamp(Math.round(profile.meshWidth * meshScale), 24, 128),
-    meshHeight: clamp(Math.round(profile.meshHeight * meshScale), 18, 96),
+    meshWidth: clamp(Math.round(profile.meshWidth * meshScale), 24, 192),
+    meshHeight: clamp(Math.round(profile.meshHeight * meshScale), 18, 144),
     pixelRatio: Math.min(devicePixelRatio, profile.pixelRatio),
     textureRatio: profile.textureRatio,
     outputFXAA: settings.fxaa,
@@ -160,10 +166,13 @@ async function loadCustomVisualizerPresetCatalog(
       }
       return catalog;
     })
-    .catch(() => ({
-      sourceDir: '',
-      presets: [],
-    }))
+    .catch((error) => {
+      console.error('Failed to load visualizer preset catalog', error);
+      return {
+        sourceDir: '',
+        presets: [],
+      };
+    })
     .finally(() => {
       customPresetCatalogPromise = null;
     });
@@ -205,7 +214,8 @@ export async function loadVisualizerPresetById(
     const normalizedPreset = preset as Record<string, unknown>;
     customPresetCache.set(presetId, normalizedPreset);
     return normalizedPreset;
-  } catch {
+  } catch (error) {
+    console.error(`Failed to load visualizer preset ${presetId}`, error);
     return null;
   }
 }
@@ -223,16 +233,21 @@ export function getVisualizerPresetPreference(
 
 export function getVisibleVisualizerPresetNames(
   presetNames: string[],
-  settings: Pick<VisualizerSettings, 'presetPreferences'>
+  settings: Pick<VisualizerSettings, 'presetPreferences' | 'onlyFavourites'>
 ): string[] {
-  return presetNames.filter((presetName) => getVisualizerPresetPreference(settings, presetName) !== 'hidden');
+  return presetNames.filter((presetName) => {
+    const pref = getVisualizerPresetPreference(settings, presetName);
+    if (pref === 'hidden') return false;
+    if (settings.onlyFavourites && pref !== 'favorite') return false;
+    return true;
+  });
 }
 
 export function getAdjacentVisualizerPresetName(
   presetNames: string[],
   currentPresetName: string,
   direction: 1 | -1,
-  settings: Pick<VisualizerSettings, 'presetPreferences'>
+  settings: Pick<VisualizerSettings, 'presetPreferences' | 'onlyFavourites'>
 ): string | null {
   const visiblePresetNames = getVisibleVisualizerPresetNames(presetNames, settings);
   if (visiblePresetNames.length === 0) return null;
@@ -252,7 +267,7 @@ export function getAdjacentVisualizerPresetName(
 export function getNextAutoCyclePresetName(
   presetNames: string[],
   currentPresetName: string,
-  settings: Pick<VisualizerSettings, 'presetPreferences' | 'cycleOrder'>
+  settings: Pick<VisualizerSettings, 'presetPreferences' | 'cycleOrder' | 'onlyFavourites'>
 ): string | null {
   const visiblePresetNames = getVisibleVisualizerPresetNames(presetNames, settings);
   if (visiblePresetNames.length === 0) return null;

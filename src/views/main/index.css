@@ -78,6 +78,12 @@ body {
 /* Also fix the search-box placeholder which uses the same zinc-600 token. */
 .light-theme .placeholder\:text-zinc-600::placeholder { color: #52525b; }
 
+/* Soundbar animation used in the Sidebar Now Playing indicator */
+@keyframes soundbar {
+  0%, 100% { transform: scaleY(0.4); }
+  50%       { transform: scaleY(1); }
+}
+
 /* Range input */
 input[type="range"] {
   -webkit-appearance: none;

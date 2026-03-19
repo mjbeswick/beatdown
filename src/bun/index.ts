@@ -350,6 +350,12 @@ const rpc = defineElectrobunRPC<ReelRPCSchema, 'bun'>('bun', {
         return paths.getAll();
       },
 
+      'visualizer-presets:clear-folder': () => {
+        paths.clearVisualizerPresetsDir();
+        invalidateCustomVisualizerPresetCache();
+        return paths.getAll();
+      },
+
       'visualizer-presets:list': () => {
         return listCustomVisualizerPresets(paths.visualizerPresetsDir);
       },

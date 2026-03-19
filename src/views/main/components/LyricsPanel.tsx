@@ -14,6 +14,9 @@ export default function LyricsPanel({ isOpen, onClose }: Props) {
   const [lyrics, setLyrics] = useState<LyricLine[] | null>(null);
   const [loading, setLoading] = useState(false);
   const activeRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const userScrollingRef = useRef(false);
+  const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Fetch lyrics when current track changes
   useEffect(() => {
@@ -32,8 +35,31 @@ export default function LyricsPanel({ isOpen, onClose }: Props) {
       .finally(() => setLoading(false));
   }, [player.current, isOpen]);
 
-  // Scroll active line into view
+  // Track user scroll intent — suppress auto-scroll for 5 seconds after manual scroll
   useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const onScroll = () => {
+      userScrollingRef.current = true;
+      if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+      scrollTimeoutRef.current = setTimeout(() => {
+        userScrollingRef.current = false;
+      }, 5000);
+    };
+
+    container.addEventListener('wheel', onScroll, { passive: true });
+    container.addEventListener('touchmove', onScroll, { passive: true });
+    return () => {
+      container.removeEventListener('wheel', onScroll);
+      container.removeEventListener('touchmove', onScroll);
+      if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+    };
+  }, []);
+
+  // Scroll active line into view, but not when the user is manually scrolling
+  useEffect(() => {
+    if (userScrollingRef.current) return;
     if (activeRef.current) {
       activeRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
@@ -68,7 +94,7 @@ export default function LyricsPanel({ isOpen, onClose }: Props) {
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-1">
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-1">
         {loading && (
           <p className="text-zinc-600 text-sm text-center mt-8">Loading…</p>
         )}
