@@ -15,12 +15,30 @@ import ErrorModal from './components/ErrorModal';
 import DownloadPreviewModal from './components/DownloadPreviewModal';import CloseConfirmModal from './components/CloseConfirmModal';import { $nav } from './stores/nav';
 import { loadAllFx } from './stores/downloads';
 import { $player, togglePlay, next, prev, seek, setVolume } from './stores/player';
+import { $theme } from './stores/theme';
 import './audio/engine'; // initialize audio engine
 
 export default function App() {
   const nav = useUnit($nav);
   const player = useUnit($player);
+  const theme = useUnit($theme);
   const [lyricsOpen, setLyricsOpen] = useState(false);
+
+  // Apply and track the selected theme across the entire app lifetime.
+  useEffect(() => {
+    const apply = (prefersDark: boolean) =>
+      document.documentElement.classList.toggle('light-theme', !prefersDark);
+
+    if (theme === 'system') {
+      const mq = window.matchMedia('(prefers-color-scheme: dark)');
+      apply(mq.matches);
+      const handler = (e: MediaQueryListEvent) => apply(e.matches);
+      mq.addEventListener('change', handler);
+      return () => mq.removeEventListener('change', handler);
+    } else {
+      apply(theme === 'dark');
+    }
+  }, [theme]);
 
   // Load all downloads on startup
   useEffect(() => {

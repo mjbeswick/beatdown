@@ -2,6 +2,7 @@ import { AudioWaveform, FolderOpen, Music, Gauge } from 'lucide-react';
 import { useUnit } from 'effector-react';
 import { usePersistedState } from '../hooks/usePersistedState';
 import { useEffect, useState } from 'react';
+import { $theme, themeChanged } from '../stores/theme';
 import type { AudioFormat, QualityPreset } from '../../../shared/types';
 import type { ReelPaths } from '../../../shared/rpc-schema';
 import { rpc } from '../rpc';
@@ -38,7 +39,7 @@ const QUALITIES: { value: QualityPreset; label: string }[] = [
   { value: '96', label: '96 kbps' },
 ];
 
-type ThemeOption = 'system' | 'light' | 'dark';
+import type { ThemeOption } from '../stores/theme';
 
 const THEMES: { value: ThemeOption; label: string }[] = [
   { value: 'system', label: 'System' },
@@ -65,7 +66,7 @@ const VISUALIZER_CYCLE_ORDERS = [
 ] as const;
 
 export default function SettingsView() {
-  const [theme, setTheme] = usePersistedState<ThemeOption>('reel:theme', 'system');
+  const theme = useUnit($theme);
   const [format, setFormat] = usePersistedState<AudioFormat>('reel:format', 'm4a');
   const [quality, setQuality] = usePersistedState<QualityPreset>('reel:quality', 'auto');
   const visualizerSettings = useUnit($visualizerSettings);
@@ -100,22 +101,6 @@ export default function SettingsView() {
 
   const shortenPath = (p: string) => p.replace(/^\/Users\/[^/]+/, '~');
 
-  useEffect(() => {
-    const applyTheme = (prefersDark: boolean) => {
-      document.documentElement.classList.toggle('light-theme', !prefersDark);
-    };
-
-    if (theme === 'system') {
-      const mq = window.matchMedia('(prefers-color-scheme: dark)');
-      applyTheme(mq.matches);
-      const handler = (e: MediaQueryListEvent) => applyTheme(e.matches);
-      mq.addEventListener('change', handler);
-      return () => mq.removeEventListener('change', handler);
-    } else {
-      document.documentElement.classList.toggle('light-theme', theme === 'light');
-    }
-  }, [theme]);
-
   return (
     <main className="flex-1 overflow-y-auto p-6">
       <h2 className="text-zinc-200 text-base font-semibold mb-5 text-center">Settings</h2>
@@ -131,7 +116,7 @@ export default function SettingsView() {
             <div className="relative">
               <select
                 value={theme}
-                onChange={(e) => setTheme(e.target.value as ThemeOption)}
+                onChange={(e) => themeChanged(e.target.value as ThemeOption)}
                 className="bg-zinc-700/60 border border-zinc-600/50 rounded-lg text-sm text-zinc-300 px-3 py-1.5 pr-7 cursor-pointer hover:bg-zinc-700 transition-colors appearance-none outline-none"
               >
                 {THEMES.map((t) => (

@@ -29,6 +29,8 @@ import {
   loadVisualizerPresets,
 } from '../lib/visualizer';
 
+const OVERLAY_IDLE_MS = 2200;
+
 export default function VisualizerView() {
   const [player, visualizerSettings] = useUnit([$player, $visualizerSettings]);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -40,6 +42,7 @@ export default function VisualizerView() {
   const presetNamesRef = useRef<string[]>([]);
   const presetIdxRef = useRef(0);
   const presetTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const overlayTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
   // Mutable config kept in refs so callbacks never go stale
   const presetNameRef = useRef(visualizerSettings.presetName);
@@ -55,6 +58,7 @@ export default function VisualizerView() {
   const [currentIdx, setCurrentIdx] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
+  const [showOverlay, setShowOverlay] = useState(true);
 
   const butterchurn = getButterchurnLibrary();
   const currentPresetName =
@@ -100,10 +104,28 @@ export default function VisualizerView() {
 
   const teardownVisualizer = () => {
     clearTimeout(presetTimerRef.current);
+    clearTimeout(overlayTimerRef.current);
     cancelAnimationFrame(rafRef.current);
     resizeObserverRef.current?.disconnect();
     resizeObserverRef.current = null;
     vizRef.current = null;
+  };
+
+  const scheduleOverlayHide = () => {
+    clearTimeout(overlayTimerRef.current);
+    overlayTimerRef.current = setTimeout(() => {
+      setShowOverlay(false);
+    }, OVERLAY_IDLE_MS);
+  };
+
+  const revealOverlay = () => {
+    setShowOverlay(true);
+    scheduleOverlayHide();
+  };
+
+  const hideOverlay = () => {
+    clearTimeout(overlayTimerRef.current);
+    setShowOverlay(false);
   };
 
   const scheduleAutoCycle = () => {
@@ -197,6 +219,11 @@ export default function VisualizerView() {
     const onFsChange = () => setIsFullscreen(!!document.fullscreenElement);
     document.addEventListener('fullscreenchange', onFsChange);
     return () => document.removeEventListener('fullscreenchange', onFsChange);
+  }, []);
+
+  useEffect(() => {
+    revealOverlay();
+    return () => clearTimeout(overlayTimerRef.current);
   }, []);
 
   useEffect(() => {
@@ -318,7 +345,14 @@ export default function VisualizerView() {
   }
 
   return (
-    <main ref={containerRef} className="flex-1 relative overflow-hidden bg-black group">
+    <main
+      ref={containerRef}
+      className="flex-1 relative overflow-hidden bg-black"
+      onPointerMove={revealOverlay}
+      onPointerDown={revealOverlay}
+      onFocusCapture={revealOverlay}
+      onPointerLeave={hideOverlay}
+    >
       <canvas
         ref={canvasRef}
         className="w-full h-full"
@@ -333,7 +367,11 @@ export default function VisualizerView() {
       )}
 
       {/* Controls bar — visible on hover */}
-      <div className="absolute bottom-0 left-0 right-0 px-3 py-2 flex items-center gap-2 bg-gradient-to-t from-black/70 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+      <div
+        className={`absolute bottom-0 left-0 right-0 px-3 py-2 flex items-center gap-2 bg-gradient-to-t from-black/70 to-transparent transition-opacity duration-200 ${
+          showOverlay ? 'opacity-100' : 'opacity-0 pointer-events-none'
+        }`}
+      >
         <button
           onClick={handlePrev}
           title="Previous preset"
@@ -401,7 +439,7 @@ export default function VisualizerView() {
       </div>
 
       {/* Config panel */}
-      {showConfig && (
+      {showConfig && showOverlay && (
         <div className="absolute bottom-12 right-3 bg-zinc-900/95 border border-white/10 rounded-lg p-4 text-white text-xs flex flex-col gap-3 w-56 shadow-xl">
           <p className="font-medium text-white/60 uppercase tracking-wider text-[10px]">Visualizer Settings</p>
 
