@@ -16,7 +16,6 @@ let analyserNode: AnalyserNode | null = null;
 let sourceNode: MediaElementAudioSourceNode | null = null;
 const audio = new Audio();
 audio.preload = 'auto';
-audio.crossOrigin = 'anonymous';
 
 function getOrCreateCtx(): AudioContext {
   if (!audioCtx) {
@@ -48,17 +47,26 @@ export function getAudioContext(): AudioContext | null {
 
 // ── Audio event → store ────────────────────────────────────────────────────────
 
+let consecutiveErrors = 0;
+
 audio.addEventListener('timeupdate', () => {
   timeUpdated({ currentTime: audio.currentTime, duration: audio.duration || 0 });
 });
 
 audio.addEventListener('ended', () => {
+  consecutiveErrors = 0;
   trackEnded();
 });
 
 audio.addEventListener('error', () => {
   const err = audio.error;
   console.error('Audio error:', err?.code, err?.message, audio.src);
+  consecutiveErrors++;
+  if (consecutiveErrors >= 3) {
+    consecutiveErrors = 0;
+    pause();
+    return;
+  }
   trackEnded();
 });
 

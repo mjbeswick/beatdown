@@ -11,26 +11,32 @@ import { logger } from './logger';
 
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 
 const streamServer = Bun.serve({
   port: 0, // auto-assign
   fetch(req) {
-    // Handle CORS preflight (OPTIONS). Required because audio elements with
-    // crossOrigin="anonymous" trigger pre-flight for non-safelisted Range values.
+    // Echo the request's Origin header back (or allow all). This is more
+    // robust than a bare '*' because WKWebView with custom URL schemes
+    // (e.g. views://) may send Origin: null or a custom-scheme origin that
+    // some WebKit builds won't match against '*'.
+    const origin = req.headers.get('origin') ?? '*';
+
     if (req.method === 'OPTIONS') {
       return new Response(null, {
         status: 204,
         headers: {
-          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Origin': origin,
           'Access-Control-Allow-Methods': 'GET, OPTIONS',
           'Access-Control-Allow-Headers': 'Range',
           'Access-Control-Max-Age': '86400',
+          'Vary': 'Origin',
         },
       });
     }
 
     const url = new URL(req.url);
-    const filePath = decodeURIComponent(url.pathname.slice(1));
+    const filePath = decodeURIComponent(url.pathname);
     const cleanPath = path.resolve(filePath);
 
     // Security: ensure the resolved path stays within ~/Music/Reel
@@ -60,7 +66,9 @@ const streamServer = Bun.serve({
           'Accept-Ranges': 'bytes',
           'Content-Length': String(chunkSize),
           'Content-Type': getAudioMime(cleanPath),
-          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Origin': origin,
+          'Access-Control-Expose-Headers': 'Content-Range, Content-Length, Accept-Ranges',
+          'Vary': 'Origin',
         },
       });
     }
@@ -72,7 +80,8 @@ const streamServer = Bun.serve({
         'Content-Length': String(stat.size),
         'Content-Type': getAudioMime(cleanPath),
         'Accept-Ranges': 'bytes',
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': origin,
+        'Vary': 'Origin',
       },
     });
   },
@@ -160,7 +169,7 @@ const rpc = defineElectrobunRPC<ReelRPCSchema, 'bun'>('bun', {
       },
 
       'stream:getUrl': ({ filePath }) => {
-        return `http://localhost:${streamPort}/${encodeURIComponent(filePath)}`;
+        return `http://localhost:${streamPort}${encodeURI(filePath)}`;
       },
 
       'stream:getPort': () => streamPort,
@@ -203,7 +212,35 @@ logger.info('Reel starting up...');
 
 let isForceQuitting = false;
 let confirmPending = false;
-let lastWindowFrame = { x: 100, y: 100, width: 1200, height: 800 };
+
+// ── Window state persistence ──────────────────────────────────────────────────
+
+const WINDOW_STATE_PATH = path.join(os.homedir(), 'Music', 'Reel', 'window-state.json');
+const DEFAULT_FRAME = { x: 100, y: 100, width: 1200, height: 800 };
+
+function loadWindowState(): typeof DEFAULT_FRAME {
+  try {
+    const raw = fs.readFileSync(WINDOW_STATE_PATH, 'utf8');
+    const parsed = JSON.parse(raw);
+    if (typeof parsed.width === 'number' && typeof parsed.height === 'number') {
+      return { ...DEFAULT_FRAME, ...parsed };
+    }
+  } catch {}
+  return { ...DEFAULT_FRAME };
+}
+
+let saveTimeout: ReturnType<typeof setTimeout> | null = null;
+function saveWindowState(frame: typeof DEFAULT_FRAME) {
+  if (saveTimeout) clearTimeout(saveTimeout);
+  saveTimeout = setTimeout(() => {
+    try {
+      fs.mkdirSync(path.dirname(WINDOW_STATE_PATH), { recursive: true });
+      fs.writeFileSync(WINDOW_STATE_PATH, JSON.stringify(frame));
+    } catch {}
+  }, 500);
+}
+
+let lastWindowFrame = loadWindowState();
 
 // ── Browser window ────────────────────────────────────────────────────────────
 
@@ -219,11 +256,11 @@ function createMainWindow() {
   // Track window position/size so we can restore it if we need to reopen
   newWin.on('resize', (event: any) => {
     const d = event?.data;
-    if (d) lastWindowFrame = { x: d.x, y: d.y, width: d.width, height: d.height };
+    if (d) { lastWindowFrame = { x: d.x, y: d.y, width: d.width, height: d.height }; saveWindowState(lastWindowFrame); }
   });
   newWin.on('move', (event: any) => {
     const d = event?.data;
-    if (d) { lastWindowFrame.x = d.x; lastWindowFrame.y = d.y; }
+    if (d) { lastWindowFrame.x = d.x; lastWindowFrame.y = d.y; saveWindowState(lastWindowFrame); }
   });
 
   return newWin;

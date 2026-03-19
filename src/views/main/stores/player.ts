@@ -195,5 +195,5 @@ rpc.addMessageListener('stream:port', ({ port }) => {
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 export function getStreamUrl(filePath: string, port: number): string {
-  return `http://localhost:${port}/${encodeURIComponent(filePath)}`;
+  return `http://localhost:${port}${encodeURI(filePath)}`;
 }

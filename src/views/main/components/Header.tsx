@@ -25,7 +25,7 @@ export default function Header() {
   return (
     <header
       className="bg-zinc-800 border-b border-zinc-700 flex items-center shrink-0 h-12 relative"
-      style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
+      style={{ WebkitAppRegion: 'drag', WebkitUserSelect: 'none', cursor: 'default' } as React.CSSProperties}
       onDoubleClick={() => rpc.proxy.request['window:zoom'](undefined as any)}
     >
       {/* Left spacer to clear macOS traffic light buttons (~80px) */}

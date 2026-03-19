@@ -31,8 +31,8 @@ export default function SettingsView() {
 
   return (
     <main className="flex-1 overflow-y-auto p-6">
-      <h2 className="text-zinc-300 text-base font-semibold mb-4">Settings</h2>
-      <div className="space-y-3 max-w-lg">
+      <h2 className="text-zinc-300 text-base font-semibold mb-4 text-center">Settings</h2>
+      <div className="space-y-3 max-w-lg mx-auto">
         <div className="bg-zinc-800/60 border border-zinc-700 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-1">
             <FolderOpen size={14} className="text-zinc-500" />
