@@ -388,7 +388,8 @@ export class DownloadQueue extends EventEmitter {
             });
           }
         },
-        signal
+        signal,
+        item.type === 'album' ? item.name : undefined
       );
 
       this.mutateTrack(downloadId, track.id, {

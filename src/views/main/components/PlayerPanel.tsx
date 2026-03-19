@@ -1,4 +1,5 @@
 import { useUnit } from 'effector-react';
+import { useState, useRef, useEffect } from 'react';
 import {
   Play,
   Pause,
@@ -11,6 +12,8 @@ import {
   VolumeX,
   Music2,
   Mic2,
+  Cast,
+  Loader2,
 } from 'lucide-react';
 import {
   $player,
@@ -22,7 +25,9 @@ import {
   toggleShuffle,
   toggleRepeat,
 } from '../stores/player';
+import { $cast, devicesDiscovered, discoveringStarted, deviceSelected } from '../stores/cast';
 import { navToAlbum, navToArtist } from '../stores/nav';
+import { rpc } from '../rpc';
 // Ensure audio engine is initialized
 import '../audio/engine';
 
@@ -33,6 +38,60 @@ interface Props {
 
 export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
   const player = useUnit($player);
+  const cast = useUnit($cast);
+  const [castOpen, setCastOpen] = useState(false);
+  const castRef = useRef<HTMLDivElement>(null);
+
+  // Close the cast popover when clicking outside
+  useEffect(() => {
+    if (!castOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (castRef.current && !castRef.current.contains(e.target as Node)) {
+        setCastOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [castOpen]);
+
+  const handleCastClick = async () => {
+    if (cast.isCasting) {
+      // Already casting — toggle the popover to show stop option
+      setCastOpen((v) => !v);
+      return;
+    }
+    setCastOpen(true);
+    discoveringStarted();
+    try {
+      const devices = await rpc.proxy.request['cast:discover'](undefined as any);
+      devicesDiscovered(devices);
+    } catch {
+      devicesDiscovered([]);
+    }
+  };
+
+  const handleSelectDevice = async (device: import('../stores/cast').DLNADevice) => {
+    deviceSelected(device);
+    setCastOpen(false);
+    if (player.current?.track.filePath) {
+      try {
+        await rpc.proxy.request['cast:start']({
+          deviceId: device.id,
+          streamPath: player.current.track.filePath,
+          title: player.current.track.title,
+          artist: player.current.track.artist,
+        });
+      } catch {}
+    }
+  };
+
+  const handleStopCasting = async () => {
+    if (cast.activeDevice) {
+      try { await rpc.proxy.request['cast:stop']({ deviceId: cast.activeDevice.id }); } catch {}
+    }
+    deviceSelected(null);
+    setCastOpen(false);
+  };
 
   if (!player.current) return null;
 
@@ -148,7 +207,7 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
         </div>
       </div>
 
-      {/* Volume + lyrics */}
+      {/* Volume + lyrics + cast */}
       <div className="flex items-center gap-2 w-36 justify-end shrink-0">
         <button
           onClick={() => setVolume(player.volume > 0 ? 0 : 0.8)}
@@ -177,6 +236,58 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
         >
           <Mic2 size={14} />
         </button>
+
+        {/* Cast button + popover */}
+        <div className="relative shrink-0" ref={castRef}>
+          <button
+            onClick={handleCastClick}
+            className={`transition-colors ${
+              cast.isCasting ? 'text-emerald-500' : 'text-zinc-500 hover:text-zinc-300'
+            }`}
+            title={cast.isCasting ? `Casting to ${cast.activeDevice?.name}` : 'Cast to device'}
+          >
+            <Cast size={14} />
+          </button>
+
+          {castOpen && (
+            <div className="absolute bottom-8 right-0 w-52 bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl py-1 z-50">
+              {cast.isCasting ? (
+                <>
+                  <div className="px-3 py-1.5 text-[11px] text-zinc-400 border-b border-zinc-700">
+                    Casting to <span className="text-zinc-200">{cast.activeDevice?.name}</span>
+                  </div>
+                  <button
+                    onClick={handleStopCasting}
+                    className="w-full text-left px-3 py-2 text-xs text-red-400 hover:bg-zinc-700 transition-colors"
+                  >
+                    Stop casting
+                  </button>
+                </>
+              ) : cast.isDiscovering ? (
+                <div className="flex items-center gap-2 px-3 py-2 text-xs text-zinc-400">
+                  <Loader2 size={12} className="animate-spin" />
+                  Scanning for devices…
+                </div>
+              ) : cast.devices.length === 0 ? (
+                <div className="px-3 py-2 text-xs text-zinc-500">No devices found</div>
+              ) : (
+                <>
+                  <div className="px-3 py-1 text-[11px] text-zinc-500">Select a device</div>
+                  {cast.devices.map((device) => (
+                    <button
+                      key={device.id}
+                      onClick={() => handleSelectDevice(device)}
+                      className="w-full text-left px-3 py-2 text-xs text-zinc-200 hover:bg-zinc-700 transition-colors truncate"
+                      title={device.name}
+                    >
+                      {device.name}
+                    </button>
+                  ))}
+                </>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

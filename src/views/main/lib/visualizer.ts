@@ -1,9 +1,13 @@
 let butterchurnLib: any = null;
 let butterchurnPresetPack: any = null;
-let presetCache: Record<string, unknown> | null = null;
+let stockPresetCache: Record<string, unknown> | null = null;
 
 import type {
-  VisualizerCycleOrder,
+  VisualizerPresetCatalog as RemoteVisualizerPresetCatalog,
+  VisualizerPresetDescriptor as RemoteVisualizerPresetDescriptor,
+} from '../../../shared/rpc-schema';
+import { rpc } from '../rpc';
+import type {
   VisualizerMeshDensity,
   VisualizerPresetPreference,
   VisualizerQualityPreset,
@@ -25,6 +29,12 @@ export interface VisualizerRenderOptions {
   pixelRatio: number;
   textureRatio: number;
   outputFXAA: boolean;
+}
+
+export interface VisualizerPresetDescriptor {
+  id: string;
+  label: string;
+  source: 'stock' | 'custom';
 }
 
 const QUALITY_CONFIG: Record<
@@ -58,6 +68,12 @@ const MESH_SCALE: Record<VisualizerMeshDensity, number> = {
   extreme: 1.5,
 };
 
+let stockPresetDescriptorsCache: VisualizerPresetDescriptor[] | null = null;
+let customPresetCatalogCache: RemoteVisualizerPresetCatalog | null = null;
+let customPresetCatalogPromise: Promise<RemoteVisualizerPresetCatalog> | null = null;
+const customPresetCache = new Map<string, Record<string, unknown>>();
+const customPresetLabels = new Map<string, string>();
+
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
@@ -87,31 +103,115 @@ export function getButterchurnLibrary(): any {
   return butterchurnLib;
 }
 
-export function loadVisualizerPresets(): Record<string, unknown> {
-  if (presetCache) return presetCache;
+function loadStockVisualizerPresets(): Record<string, unknown> {
+  if (stockPresetCache) return stockPresetCache;
 
   if (!butterchurnPresetPack) {
-    presetCache = {};
-    return presetCache;
+    stockPresetCache = {};
+    return stockPresetCache;
   }
 
   try {
     if (typeof butterchurnPresetPack.getPresets === 'function') {
-      presetCache = butterchurnPresetPack.getPresets();
+      stockPresetCache = butterchurnPresetPack.getPresets();
     } else if (typeof butterchurnPresetPack === 'object') {
-      presetCache = butterchurnPresetPack as Record<string, unknown>;
+      stockPresetCache = butterchurnPresetPack as Record<string, unknown>;
     } else {
-      presetCache = {};
+      stockPresetCache = {};
     }
   } catch {
-    presetCache = {};
+    stockPresetCache = {};
   }
 
-  return presetCache;
+  return stockPresetCache;
 }
 
-export function getVisualizerPresetNames(): string[] {
-  return Object.keys(loadVisualizerPresets());
+function getStockVisualizerPresetDescriptors(): VisualizerPresetDescriptor[] {
+  if (stockPresetDescriptorsCache) return stockPresetDescriptorsCache;
+
+  stockPresetDescriptorsCache = Object.keys(loadStockVisualizerPresets()).map((presetName) => ({
+    id: presetName,
+    label: presetName,
+    source: 'stock',
+  }));
+
+  return stockPresetDescriptorsCache;
+}
+
+export function invalidateVisualizerPresetCatalog(): void {
+  customPresetCatalogCache = null;
+  customPresetCatalogPromise = null;
+  customPresetCache.clear();
+  customPresetLabels.clear();
+}
+
+async function loadCustomVisualizerPresetCatalog(
+  forceRefresh = false
+): Promise<RemoteVisualizerPresetCatalog> {
+  if (forceRefresh) invalidateVisualizerPresetCatalog();
+  if (customPresetCatalogCache) return customPresetCatalogCache;
+  if (customPresetCatalogPromise) return customPresetCatalogPromise;
+
+  customPresetCatalogPromise = rpc.proxy.request['visualizer-presets:list'](undefined as never)
+    .then((catalog) => {
+      customPresetCatalogCache = catalog;
+      for (const preset of catalog.presets) {
+        customPresetLabels.set(preset.id, preset.label);
+      }
+      return catalog;
+    })
+    .catch(() => ({
+      sourceDir: '',
+      presets: [],
+    }))
+    .finally(() => {
+      customPresetCatalogPromise = null;
+    });
+
+  return customPresetCatalogPromise;
+}
+
+export async function loadVisualizerPresetCatalog(
+  forceRefreshCustom = false
+): Promise<VisualizerPresetDescriptor[]> {
+  const stockPresets = getStockVisualizerPresetDescriptors();
+  const customCatalog = await loadCustomVisualizerPresetCatalog(forceRefreshCustom);
+  const customPresets = customCatalog.presets.map(
+    (preset: RemoteVisualizerPresetDescriptor): VisualizerPresetDescriptor => ({
+      id: preset.id,
+      label: preset.label,
+      source: 'custom',
+    })
+  );
+
+  return [...stockPresets, ...customPresets];
+}
+
+export async function loadVisualizerPresetById(
+  presetId: string
+): Promise<Record<string, unknown> | null> {
+  const stockPreset = loadStockVisualizerPresets()[presetId];
+  if (stockPreset && typeof stockPreset === 'object') {
+    return stockPreset as Record<string, unknown>;
+  }
+
+  const cachedCustomPreset = customPresetCache.get(presetId);
+  if (cachedCustomPreset) return cachedCustomPreset;
+
+  try {
+    const preset = await rpc.proxy.request['visualizer-presets:get']({ id: presetId });
+    if (!preset || typeof preset !== 'object') return null;
+
+    const normalizedPreset = preset as Record<string, unknown>;
+    customPresetCache.set(presetId, normalizedPreset);
+    return normalizedPreset;
+  } catch {
+    return null;
+  }
+}
+
+export function getVisualizerPresetLabel(presetId: string): string {
+  return customPresetLabels.get(presetId) ?? presetId;
 }
 
 export function getVisualizerPresetPreference(

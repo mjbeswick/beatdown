@@ -1,8 +1,20 @@
-import type { DownloadItem, LyricLine, AddDownloadParams, SpotifyContent } from './types';
+import type { DownloadItem, LyricLine, AddDownloadParams, SpotifyContent, DLNADevice } from './types';
+export type { DLNADevice };
 
 export interface ReelPaths {
   libraryDir: string;
   playlistsDir: string;
+  visualizerPresetsDir: string;
+}
+
+export interface VisualizerPresetDescriptor {
+  id: string;
+  label: string;
+}
+
+export interface VisualizerPresetCatalog {
+  sourceDir: string;
+  presets: VisualizerPresetDescriptor[];
 }
 
 /**
@@ -29,7 +41,21 @@ export interface ReelRPCSchema {
       'app:forceQuit': { params: undefined; response: void };
       'app:cancelClose': { params: undefined; response: void };
       'paths:get': { params: undefined; response: ReelPaths };
-      'paths:browse': { params: { type: 'library' | 'playlists' }; response: ReelPaths | null };
+      'paths:browse': {
+        params: { type: 'library' | 'playlists' | 'visualizerPresets' };
+        response: ReelPaths | null;
+      };
+      'visualizer-presets:list': { params: undefined; response: VisualizerPresetCatalog };
+      'visualizer-presets:get': {
+        params: { id: string };
+        response: Record<string, unknown> | null;
+      };
+      'cast:discover': { params: undefined; response: DLNADevice[] };
+      'cast:start': { params: { deviceId: string; streamPath: string; title: string; artist: string }; response: void };
+      'cast:stop': { params: { deviceId: string }; response: void };
+      'cast:pause': { params: { deviceId: string }; response: void };
+      'cast:resume': { params: { deviceId: string }; response: void };
+      'cast:seek': { params: { deviceId: string; seconds: number }; response: void };
     };
     messages: {
       'downloads:state': DownloadItem[];

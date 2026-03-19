@@ -17,7 +17,7 @@ export default function AlbumsView() {
   // Albums = downloads with multiple tracks, optionally filtered by name
   const q = search.trim().toLowerCase();
   const albums = downloads
-    .filter((d) => d.tracks.length > 0)
+    .filter((d) => d.type === 'album' && d.tracks.length > 0)
     .filter((d) => !q || d.name.toLowerCase().includes(q));
 
   if (albums.length === 0) {
@@ -43,7 +43,7 @@ export default function AlbumsView() {
   return (
     <main className="flex-1 overflow-y-auto overflow-x-hidden">
       <div className="sticky top-0 z-10 bg-zinc-800/60 backdrop-blur border-b border-zinc-700/60 flex items-center px-4 py-1.5 text-xs text-zinc-500 font-medium select-none">
-        <div className="flex-1">Album / Playlist</div>
+        <div className="flex-1">Album</div>
         <div className="w-20 text-right">Tracks</div>
       </div>
 

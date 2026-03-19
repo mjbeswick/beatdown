@@ -4,6 +4,7 @@ export type VisualizerQualityPreset = 'performance' | 'balanced' | 'detail';
 export type VisualizerMeshDensity = 'sparse' | 'standard' | 'dense' | 'extreme';
 export type VisualizerCycleOrder = 'random' | 'sequential';
 export type VisualizerPresetPreference = 'default' | 'favorite' | 'hidden';
+export type VisualizerFps = 24 | 30 | 60 | 0; // 0 = unlimited
 
 export interface VisualizerSettings {
   presetName: string;
@@ -15,6 +16,7 @@ export interface VisualizerSettings {
   meshDensity: VisualizerMeshDensity;
   cycleOrder: VisualizerCycleOrder;
   presetPreferences: Record<string, VisualizerPresetPreference>;
+  fps: VisualizerFps;
 }
 
 const STORAGE_KEY = 'reel:visualizer';
@@ -22,6 +24,7 @@ const QUALITY_PRESETS: VisualizerQualityPreset[] = ['performance', 'balanced', '
 const MESH_DENSITIES: VisualizerMeshDensity[] = ['sparse', 'standard', 'dense', 'extreme'];
 const CYCLE_ORDERS: VisualizerCycleOrder[] = ['random', 'sequential'];
 const PRESET_PREFERENCES: VisualizerPresetPreference[] = ['default', 'favorite', 'hidden'];
+const FPS_VALUES: VisualizerFps[] = [24, 30, 60, 0];
 
 const DEFAULT_SETTINGS: VisualizerSettings = {
   presetName: '',
@@ -33,6 +36,7 @@ const DEFAULT_SETTINGS: VisualizerSettings = {
   meshDensity: 'standard',
   cycleOrder: 'random',
   presetPreferences: {},
+  fps: 60,
 };
 
 function clamp(value: number, min: number, max: number): number {
@@ -80,6 +84,10 @@ function sanitizeSettings(input: Partial<VisualizerSettings> | null | undefined)
       typeof input?.cycleOrder === 'string' && CYCLE_ORDERS.includes(input.cycleOrder as VisualizerCycleOrder)
         ? (input.cycleOrder as VisualizerCycleOrder)
         : DEFAULT_SETTINGS.cycleOrder,
+    fps:
+      typeof input?.fps === 'number' && FPS_VALUES.includes(input.fps as VisualizerFps)
+        ? (input.fps as VisualizerFps)
+        : DEFAULT_SETTINGS.fps,
     presetPreferences,
   };
 }
@@ -118,6 +126,7 @@ export const setVisualizerQuality = createEvent<VisualizerQualityPreset>();
 export const setVisualizerFXAA = createEvent<boolean>();
 export const setVisualizerMeshDensity = createEvent<VisualizerMeshDensity>();
 export const setVisualizerCycleOrder = createEvent<VisualizerCycleOrder>();
+export const setVisualizerFps = createEvent<VisualizerFps>();
 export const setVisualizerPresetPreference = createEvent<{
   presetName: string;
   preference: VisualizerPresetPreference;
@@ -133,6 +142,7 @@ export const $visualizerSettings = createStore<VisualizerSettings>(loadSettings(
   .on(setVisualizerFXAA, (state, fxaa) => applyPatch(state, { fxaa }))
   .on(setVisualizerMeshDensity, (state, meshDensity) => applyPatch(state, { meshDensity }))
   .on(setVisualizerCycleOrder, (state, cycleOrder) => applyPatch(state, { cycleOrder }))
+  .on(setVisualizerFps, (state, fps) => applyPatch(state, { fps }))
   .on(setVisualizerPresetPreference, (state, { presetName, preference }) => {
     const presetPreferences = { ...state.presetPreferences };
     if (preference === 'default') delete presetPreferences[presetName];

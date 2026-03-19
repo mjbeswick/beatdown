@@ -14,6 +14,7 @@ const CONFIG_PATH = path.join(DEFAULT_BASE, 'paths.json');
 export interface ReelPaths {
   libraryDir: string;
   playlistsDir: string;
+  visualizerPresetsDir: string;
 }
 
 function load(): ReelPaths {
@@ -23,11 +24,14 @@ function load(): ReelPaths {
     return {
       libraryDir: parsed.libraryDir || path.join(DEFAULT_BASE, 'Library'),
       playlistsDir: parsed.playlistsDir || path.join(DEFAULT_BASE, 'Playlists'),
+      visualizerPresetsDir:
+        parsed.visualizerPresetsDir || path.join(DEFAULT_BASE, 'Visualizer Presets'),
     };
   } catch {
     return {
       libraryDir: path.join(DEFAULT_BASE, 'Library'),
       playlistsDir: path.join(DEFAULT_BASE, 'Playlists'),
+      visualizerPresetsDir: path.join(DEFAULT_BASE, 'Visualizer Presets'),
     };
   }
 }
@@ -43,6 +47,7 @@ let current: ReelPaths = load();
 export const paths = {
   get libraryDir() { return current.libraryDir; },
   get playlistsDir() { return current.playlistsDir; },
+  get visualizerPresetsDir() { return current.visualizerPresetsDir; },
 
   getAll(): ReelPaths {
     return { ...current };
@@ -55,6 +60,11 @@ export const paths = {
 
   setPlaylistsDir(dir: string) {
     current.playlistsDir = dir;
+    save(current);
+  },
+
+  setVisualizerPresetsDir(dir: string) {
+    current.visualizerPresetsDir = dir;
     save(current);
   },
 };

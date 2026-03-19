@@ -12,14 +12,18 @@ import {
   setVisualizerBlendSeconds,
   setVisualizerCycleSeconds,
   setVisualizerCycleOrder,
+  setVisualizerFps,
   setVisualizerFXAA,
   setVisualizerMeshDensity,
   setVisualizerPresetName,
   setVisualizerQuality,
 } from '../stores/visualizer';
+import type { VisualizerFps } from '../stores/visualizer';
 import {
-  getVisualizerPresetNames,
+  type VisualizerPresetDescriptor,
   getVisibleVisualizerPresetNames,
+  invalidateVisualizerPresetCatalog,
+  loadVisualizerPresetCatalog,
 } from '../lib/visualizer';
 
 const FORMATS: { value: AudioFormat; label: string }[] = [
@@ -71,9 +75,12 @@ export default function SettingsView() {
   const [quality, setQuality] = usePersistedState<QualityPreset>('reel:quality', 'auto');
   const visualizerSettings = useUnit($visualizerSettings);
   const [reelPaths, setReelPaths] = useState<ReelPaths | null>(null);
-  const [browsing, setBrowsing] = useState<'library' | 'playlists' | null>(null);
-  const presetNames = getVisualizerPresetNames();
-  const visiblePresetCount = getVisibleVisualizerPresetNames(presetNames, visualizerSettings).length;
+  const [presetCatalog, setPresetCatalog] = useState<VisualizerPresetDescriptor[]>([]);
+  const [loadingPresetCatalog, setLoadingPresetCatalog] = useState(true);
+  const [browsing, setBrowsing] = useState<'library' | 'playlists' | 'visualizerPresets' | null>(null);
+  const presetIds = presetCatalog.map((preset) => preset.id);
+  const visiblePresetCount = getVisibleVisualizerPresetNames(presetIds, visualizerSettings).length;
+  const customPresetCount = presetCatalog.filter((preset) => preset.source === 'custom').length;
   const favoritePresetCount = Object.values(visualizerSettings.presetPreferences).filter(
     (preference) => preference === 'favorite'
   ).length;
@@ -81,19 +88,42 @@ export default function SettingsView() {
     (preference) => preference === 'hidden'
   ).length;
   const selectedPresetName =
-    presetNames.includes(visualizerSettings.presetName)
+    presetIds.includes(visualizerSettings.presetName)
       ? visualizerSettings.presetName
-      : (presetNames[0] ?? '');
+      : (presetIds[0] ?? '');
 
   useEffect(() => {
     rpc.proxy.request['paths:get'](undefined as any).then(setReelPaths).catch(() => {});
   }, []);
 
-  const browsePath = async (type: 'library' | 'playlists') => {
+  useEffect(() => {
+    let cancelled = false;
+    setLoadingPresetCatalog(true);
+
+    void loadVisualizerPresetCatalog(true)
+      .then((catalog) => {
+        if (!cancelled) setPresetCatalog(catalog);
+      })
+      .catch(() => {
+        if (!cancelled) setPresetCatalog([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingPresetCatalog(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [reelPaths?.visualizerPresetsDir]);
+
+  const browsePath = async (type: 'library' | 'playlists' | 'visualizerPresets') => {
     setBrowsing(type);
     try {
       const updated = await rpc.proxy.request['paths:browse']({ type });
-      if (updated) setReelPaths(updated);
+      if (updated) {
+        if (type === 'visualizerPresets') invalidateVisualizerPresetCatalog();
+        setReelPaths(updated);
+      }
     } catch {} finally {
       setBrowsing(null);
     }
@@ -231,18 +261,39 @@ export default function SettingsView() {
                 value={selectedPresetName}
                 onChange={(e) => setVisualizerPresetName(e.target.value)}
                 className="w-full bg-zinc-700/60 border border-zinc-600/50 rounded-lg text-sm text-zinc-300 px-3 py-1.5 pr-7 cursor-pointer hover:bg-zinc-700 transition-colors appearance-none outline-none truncate"
-                disabled={presetNames.length === 0}
+                disabled={presetCatalog.length === 0 || loadingPresetCatalog}
               >
-                {presetNames.length === 0 ? (
+                {presetCatalog.length === 0 ? (
                   <option value="">Unavailable</option>
                 ) : (
-                  presetNames.map((name) => (
-                    <option key={name} value={name}>{name}</option>
+                  presetCatalog.map((preset) => (
+                    <option key={preset.id} value={preset.id}>{preset.label}</option>
                   ))
                 )}
               </select>
               <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 text-xs">▾</span>
             </div>
+          </div>
+
+          <div className="flex items-center justify-between px-4 py-2.5 border-t border-zinc-700/40">
+            <div className="flex items-center gap-2 min-w-0">
+              <FolderOpen size={13} className="text-zinc-500 shrink-0" />
+              <div className="min-w-0">
+                <span className="text-zinc-300 text-sm block">Custom preset folder</span>
+                <code className="text-zinc-500 text-[11px] font-mono truncate block max-w-[200px]">
+                  {reelPaths?.visualizerPresetsDir
+                    ? shortenPath(reelPaths.visualizerPresetsDir)
+                    : '…'}
+                </code>
+              </div>
+            </div>
+            <button
+              onClick={() => browsePath('visualizerPresets')}
+              disabled={browsing === 'visualizerPresets'}
+              className="shrink-0 ml-2 text-xs text-zinc-400 hover:text-zinc-200 bg-zinc-700/60 border border-zinc-600/50 rounded-lg px-2.5 py-1 transition-colors disabled:opacity-50"
+            >
+              {browsing === 'visualizerPresets' ? '…' : 'Change'}
+            </button>
           </div>
 
           <div className="flex items-center justify-between px-4 py-2.5 border-t border-zinc-700/40">
@@ -320,6 +371,13 @@ export default function SettingsView() {
             </span>
           </div>
 
+          <div className="px-4 py-2.5 border-t border-zinc-700/40 flex items-center justify-between text-xs">
+            <span className="text-zinc-500">Imported Milkdrop presets</span>
+            <span className="text-zinc-300 font-mono">
+              {loadingPresetCatalog ? '…' : customPresetCount}
+            </span>
+          </div>
+
           <div className="px-4 py-3 border-t border-zinc-700/40">
             <div className="flex items-center justify-between mb-2">
               <span className="text-zinc-300 text-sm">Cycle duration</span>
@@ -351,6 +409,23 @@ export default function SettingsView() {
               onChange={(e) => setVisualizerBlendSeconds(Number(e.target.value))}
               className="w-full accent-emerald-500"
             />
+          </div>
+
+          <div className="flex items-center justify-between px-4 py-2.5 border-t border-zinc-700/40">
+            <span className="text-zinc-300 text-sm">Frame rate</span>
+            <div className="relative">
+              <select
+                value={visualizerSettings.fps}
+                onChange={(e) => setVisualizerFps(Number(e.target.value) as VisualizerFps)}
+                className="bg-zinc-700/60 border border-zinc-600/50 rounded-lg text-sm text-zinc-300 px-3 py-1.5 pr-7 cursor-pointer hover:bg-zinc-700 transition-colors appearance-none outline-none"
+              >
+                <option value={24}>24 fps</option>
+                <option value={30}>30 fps</option>
+                <option value={60}>60 fps</option>
+                <option value={0}>Unlimited</option>
+              </select>
+              <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 text-xs">▾</span>
+            </div>
           </div>
         </div>
 

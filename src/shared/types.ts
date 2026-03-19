@@ -57,6 +57,13 @@ export interface LyricLine {
   text: string;
 }
 
+export interface DLNADevice {
+  id: string;
+  name: string;
+  host: string;
+  controlUrl: string;
+}
+
 // RPC schema — types shared between bun process and webview
 export interface AddDownloadParams {
   url: string;

@@ -88,7 +88,8 @@ export function downloadTrack(
   quality: QualityPreset,
   coverArtUrl: string | undefined,
   onProgress: ProgressCallback,
-  signal: AbortSignal
+  signal: AbortSignal,
+  albumName?: string
 ): Promise<string> {
   const query = `ytsearch1:${track.artist} ${track.title} audio`;
   const targetExt = format === 'aac' ? 'm4a' : format;
@@ -177,6 +178,7 @@ export function downloadTrack(
         const tagged = await embedMetadata(filePath, {
           title: track.title,
           artist: track.artist,
+          album: albumName,
           coverArtUrl,
         });
         resolve(tagged);
@@ -196,6 +198,7 @@ export function downloadTrack(
 interface Metadata {
   title: string;
   artist: string;
+  album?: string;
   coverArtUrl?: string;
 }
 
@@ -239,11 +242,12 @@ export async function embedMetadata(filePath: string, meta: Metadata): Promise<s
       ffmpegArgs.push('-map', '0', '-c', 'copy');
     }
 
-    ffmpegArgs.push(
+    const metaArgs: string[] = [
       '-metadata', `title=${meta.title}`,
       '-metadata', `artist=${meta.artist}`,
-      outputPath
-    );
+    ];
+    if (meta.album) metaArgs.push('-metadata', `album=${meta.album}`);
+    ffmpegArgs.push(...metaArgs, outputPath);
 
     await new Promise<void>((resolve, reject) => {
       const proc = spawn('ffmpeg', ffmpegArgs);

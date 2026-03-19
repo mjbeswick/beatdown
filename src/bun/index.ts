@@ -7,6 +7,21 @@ import { getSpotifyContent } from './services/spotify';
 import { getLyrics } from './services/lyrics';
 import { paths } from './services/paths';
 import { logger } from './logger';
+import {
+  getCustomVisualizerPreset,
+  invalidateCustomVisualizerPresetCache,
+  listCustomVisualizerPresets,
+} from './services/visualizer-presets';
+import {
+  discoverDevices,
+  castTrack,
+  pauseCast,
+  resumeCast,
+  seekCast,
+  stopCast,
+  getLanIp,
+} from './services/cast';
+import type { DLNADevice } from './services/cast';
 
 // ── Audio streaming server ────────────────────────────────────────────────────
 
@@ -15,9 +30,13 @@ import * as path from 'path';
 import * as os from 'os';
 
 const STREAM_HOST = '127.0.0.1';
+const STREAM_BIND = '0.0.0.0'; // bind to all interfaces so DLNA renderers can reach us
+
+// In-memory registry of discovered DLNA devices (keyed by UDN id)
+const castDevices = new Map<string, DLNADevice>();
 
 const streamServer = Bun.serve({
-  hostname: STREAM_HOST,
+  hostname: STREAM_BIND,
   port: 0, // auto-assign
   async fetch(req) {
     // Echo the request's Origin header back (or allow all). This is more
@@ -264,8 +283,52 @@ const rpc = defineElectrobunRPC<ReelRPCSchema, 'bun'>('bun', {
         return paths.getAll();
       },
 
+      'cast:discover': async () => {
+        const devices = await discoverDevices(4000);
+        castDevices.clear();
+        for (const d of devices) castDevices.set(d.id, d);
+        return devices;
+      },
+
+      'cast:start': async ({ deviceId, streamPath, title, artist }) => {
+        const device = castDevices.get(deviceId);
+        if (!device) throw new Error(`Unknown cast device: ${deviceId}`);
+        const lanIp = getLanIp();
+        const streamUrl = `http://${lanIp}:${streamPort}/stream?path=${encodeURIComponent(streamPath)}`;
+        await castTrack(device, streamUrl, title, artist);
+      },
+
+      'cast:stop': async ({ deviceId }) => {
+        const device = castDevices.get(deviceId);
+        if (!device) return;
+        await stopCast(device);
+      },
+
+      'cast:pause': async ({ deviceId }) => {
+        const device = castDevices.get(deviceId);
+        if (!device) return;
+        await pauseCast(device);
+      },
+
+      'cast:resume': async ({ deviceId }) => {
+        const device = castDevices.get(deviceId);
+        if (!device) return;
+        await resumeCast(device);
+      },
+
+      'cast:seek': async ({ deviceId, seconds }) => {
+        const device = castDevices.get(deviceId);
+        if (!device) return;
+        await seekCast(device, seconds);
+      },
+
       'paths:browse': async ({ type }) => {
-        const current = type === 'library' ? paths.libraryDir : paths.playlistsDir;
+        const current =
+          type === 'library'
+            ? paths.libraryDir
+            : type === 'playlists'
+              ? paths.playlistsDir
+              : paths.visualizerPresetsDir;
         const selected = await Utils.openFileDialog({
           startingFolder: current,
           canChooseFiles: false,
@@ -278,10 +341,21 @@ const rpc = defineElectrobunRPC<ReelRPCSchema, 'bun'>('bun', {
         if (!chosen) return null;
         if (type === 'library') {
           paths.setLibraryDir(chosen);
-        } else {
+        } else if (type === 'playlists') {
           paths.setPlaylistsDir(chosen);
+        } else {
+          paths.setVisualizerPresetsDir(chosen);
+          invalidateCustomVisualizerPresetCache();
         }
         return paths.getAll();
+      },
+
+      'visualizer-presets:list': () => {
+        return listCustomVisualizerPresets(paths.visualizerPresetsDir);
+      },
+
+      'visualizer-presets:get': async ({ id }) => {
+        return await getCustomVisualizerPreset(paths.visualizerPresetsDir, id);
       },
     },
   },
