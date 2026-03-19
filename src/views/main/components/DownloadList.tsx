@@ -1,38 +1,60 @@
 import { useUnit } from 'effector-react';
-import { $filteredDownloads } from '../stores/downloads';
+import { $filteredDownloads, $showResumeBanner, resumeBannerDismissed, resumeInterruptedFx } from '../stores/downloads';
 import DownloadRow from './DownloadRow';
-import { Music2 } from 'lucide-react';
+import { Music2, RefreshCw, X } from 'lucide-react';
 
-export default function DownloadList() {
-  const downloads = useUnit($filteredDownloads);
+interface Props {
+  searchQuery?: string;
+}
 
-  if (downloads.length === 0) {
-    return (
-      <main className="flex-1 flex items-center justify-center">
-        <div className="text-center">
-          <Music2 size={40} className="mx-auto mb-3 text-zinc-700" />
-          <p className="text-zinc-600 text-sm">No downloads</p>
-          <p className="text-zinc-700 text-xs mt-1">Paste a Spotify URL to get started</p>
-        </div>
-      </main>
-    );
-  }
+export default function DownloadList({ searchQuery = '' }: Props) {
+  const allDownloads = useUnit($filteredDownloads);
+  const showResumeBanner = useUnit($showResumeBanner);
+  const downloads = searchQuery
+    ? allDownloads.filter((d) => d.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    : allDownloads;
 
   return (
-    <main className="flex-1 overflow-y-auto overflow-x-hidden">
-      <div className="sticky top-0 z-10 bg-zinc-800/95 backdrop-blur border-b border-zinc-700 flex items-center px-3 py-1.5 text-xs text-zinc-600 font-medium uppercase tracking-wide select-none">
-        <div className="w-5 shrink-0" />
-        <div className="w-9 shrink-0" />
-        <div className="flex-1 min-w-0">Name</div>
-        <div className="w-44 shrink-0 text-right pr-1">Progress</div>
-        <div className="w-24 shrink-0 text-right">Speed</div>
-        <div className="w-16 shrink-0 text-right">ETA</div>
-        <div className="w-20 shrink-0 text-right">Tracks</div>
-        <div className="w-7 shrink-0" />
-      </div>
-      {downloads.map((item) => (
-        <DownloadRow key={item.id} item={item} />
-      ))}
+    <main className="flex-1 flex flex-col overflow-hidden">
+      {showResumeBanner && (
+        <div className="flex items-center gap-3 px-4 py-2.5 bg-amber-900/40 border-b border-amber-700/50 text-sm shrink-0">
+          <RefreshCw size={14} className="text-amber-400 shrink-0" />
+          <span className="text-amber-200 flex-1">
+            Some downloads were interrupted. Resume them?
+          </span>
+          <button
+            onClick={() => resumeInterruptedFx()}
+            className="text-xs font-medium bg-amber-700 hover:bg-amber-600 text-white px-3 py-1 rounded transition-colors"
+          >
+            Resume
+          </button>
+          <button
+            onClick={() => resumeBannerDismissed()}
+            className="text-amber-500 hover:text-amber-300 transition-colors"
+            aria-label="Dismiss"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
+      {downloads.length === 0 ? (
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <Music2 size={40} className="mx-auto mb-3 text-zinc-700" />
+            <p className="text-zinc-600 text-sm">{searchQuery ? 'No matches' : 'No downloads'}</p>
+            <p className="text-zinc-700 text-xs mt-1">
+              {searchQuery ? 'Try a different search' : 'Paste a Spotify URL to get started'}
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className="flex-1 overflow-y-auto overflow-x-hidden">
+          {downloads.map((item) => (
+            <DownloadRow key={item.id} item={item} />
+          ))}
+        </div>
+      )}
     </main>
   );
 }

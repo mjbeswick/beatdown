@@ -24,8 +24,15 @@ function getOrCreateCtx(): AudioContext {
     analyserNode = audioCtx.createAnalyser();
     analyserNode.fftSize = 2048;
     analyserNode.smoothingTimeConstant = 0.8;
-    sourceNode = audioCtx.createMediaElementSource(audio);
-    sourceNode.connect(analyserNode);
+    try {
+      sourceNode = audioCtx.createMediaElementSource(audio);
+      sourceNode.connect(analyserNode);
+    } catch (e) {
+      // SecurityError: audio element is cross-origin without CORS approval.
+      // Audio will still play via the HTML element's own output; visualiser
+      // won't receive a signal but playback is unaffected.
+      console.warn('Web Audio API source connection failed (CORS):', e);
+    }
     analyserNode.connect(audioCtx.destination);
   }
   return audioCtx;
@@ -49,8 +56,9 @@ audio.addEventListener('ended', () => {
   trackEnded();
 });
 
-audio.addEventListener('error', (e) => {
-  console.error('Audio error:', e);
+audio.addEventListener('error', () => {
+  const err = audio.error;
+  console.error('Audio error:', err?.code, err?.message, audio.src);
   trackEnded();
 });
 

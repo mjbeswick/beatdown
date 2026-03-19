@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useUnit } from 'effector-react';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
-import DownloadList from './components/DownloadList';
+import PlaylistsView from './components/PlaylistsView';
 import AlbumsView from './components/AlbumsView';
 import ArtistsView from './components/ArtistsView';
 import GenresView from './components/GenresView';
@@ -12,7 +12,7 @@ import PlayerPanel from './components/PlayerPanel';
 import LyricsPanel from './components/LyricsPanel';
 import StatusBar from './components/StatusBar';
 import ErrorModal from './components/ErrorModal';
-import { $nav } from './stores/nav';
+import DownloadPreviewModal from './components/DownloadPreviewModal';import CloseConfirmModal from './components/CloseConfirmModal';import { $nav } from './stores/nav';
 import { loadAllFx } from './stores/downloads';
 import { $player, togglePlay, next, prev, seek, setVolume } from './stores/player';
 import './audio/engine'; // initialize audio engine
@@ -66,7 +66,7 @@ export default function App() {
         <Sidebar />
 
         <div className="flex-1 flex overflow-hidden relative">
-          {nav === 'playlists' && <DownloadList />}
+          {nav === 'playlists' && <PlaylistsView />}
           {nav === 'albums' && <AlbumsView />}
           {nav === 'artists' && <ArtistsView />}
           {nav === 'genres' && <GenresView />}
@@ -88,6 +88,8 @@ export default function App() {
       )}
 
       <ErrorModal />
+      <CloseConfirmModal />
+      <DownloadPreviewModal />
     </div>
   );
 }

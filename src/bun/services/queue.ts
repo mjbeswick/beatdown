@@ -28,6 +28,7 @@ export class DownloadQueue extends EventEmitter {
   private abortControllers = new Map<string, AbortController>();
   private activeCount = 0;
   private pendingTracks: Array<{ downloadId: string; track: TrackInfo; attempt: number }> = [];
+  private pausedDownloads = new Set<string>();
 
   getAll(): DownloadItem[] {
     return [...this.items.values()].sort(
@@ -43,12 +44,36 @@ export class DownloadQueue extends EventEmitter {
     try {
       const loaded = loadAllPlaylists();
       for (const item of loaded) {
+        // Reset any tracks that were mid-download when the process was killed
+        for (const track of item.tracks) {
+          if (track.status === 'downloading' || track.status === 'converting') {
+            track.status = 'queued';
+            track.progress = 0;
+            track.speed = undefined;
+            track.eta = undefined;
+          }
+        }
         this.items.set(item.id, item);
       }
       logger.info(`Loaded ${loaded.length} playlist(s) from disk`);
     } catch (err) {
       logger.error('Failed to load playlists from disk', (err as Error).message);
     }
+  }
+
+  /** Re-queue all tracks with 'queued' status across all items and resume downloading. */
+  resumeInterrupted(): number {
+    let count = 0;
+    for (const item of this.items.values()) {
+      if (item.status === 'done') continue;
+      const tracksToResume = item.tracks.filter((t) => t.status === 'queued');
+      for (const track of tracksToResume) {
+        this.pendingTracks.push({ downloadId: item.id, track, attempt: 0 });
+        count++;
+      }
+    }
+    if (count > 0) this.drain();
+    return count;
   }
 
   async add(
@@ -99,12 +124,60 @@ export class DownloadQueue extends EventEmitter {
     return item;
   }
 
+  pause(id: string): void {
+    const item = this.items.get(id);
+    if (!item) return;
+    if (item.status === 'done' || item.status === 'error' || item.status === 'paused') return;
+
+    this.pausedDownloads.add(id);
+
+    const controller = this.abortControllers.get(id);
+    if (controller) {
+      controller.abort();
+      this.abortControllers.delete(id);
+    }
+
+    this.pendingTracks = this.pendingTracks.filter((p) => p.downloadId !== id);
+
+    for (const track of item.tracks) {
+      if (track.status === 'downloading' || track.status === 'converting') {
+        track.status = 'queued';
+        track.progress = 0;
+        track.speed = undefined;
+        track.eta = undefined;
+      }
+    }
+
+    item.status = 'paused';
+    this.emit('download:updated', { ...item, tracks: item.tracks.map((t) => ({ ...t })) });
+    savePlaylist(item);
+  }
+
+  resume(id: string): void {
+    const item = this.items.get(id);
+    if (!item) return;
+    if (!this.pausedDownloads.has(id)) return;
+
+    this.pausedDownloads.delete(id);
+
+    const queuedTracks = item.tracks.filter((t) => t.status === 'queued');
+    for (const track of queuedTracks) {
+      this.pendingTracks.push({ downloadId: id, track, attempt: 0 });
+    }
+
+    item.status = 'queued';
+    this.emit('download:updated', { ...item, tracks: item.tracks.map((t) => ({ ...t })) });
+    savePlaylist(item);
+    this.drain();
+  }
+
   remove(id: string): void {
     const controller = this.abortControllers.get(id);
     if (controller) {
       controller.abort();
       this.abortControllers.delete(id);
     }
+    this.pausedDownloads.delete(id);
     this.pendingTracks = this.pendingTracks.filter((p) => p.downloadId !== id);
 
     const item = this.items.get(id);
@@ -208,6 +281,7 @@ export class DownloadQueue extends EventEmitter {
   }
 
   private recalculate(item: DownloadItem): void {
+    const isPaused = this.pausedDownloads.has(item.id);
     const totalTracks = item.tracks.length;
     item.totalTracks = totalTracks;
 
@@ -228,13 +302,15 @@ export class DownloadQueue extends EventEmitter {
       .filter((t) => t.status === 'downloading')
       .reduce((s, t) => s + (t.speed ?? 0), 0);
 
-    if (finished === totalTracks && totalTracks > 0) {
-      item.status = (failed === totalTracks ? 'error' : 'done') as DownloadStatus;
-      item.completedAt = new Date().toISOString();
-    } else if (item.tracks.some((t) => t.status === 'downloading' || t.status === 'converting')) {
-      item.status = 'active';
-    } else if (item.status !== 'queued') {
-      item.status = 'active';
+    if (!isPaused) {
+      if (finished === totalTracks && totalTracks > 0) {
+        item.status = (failed === totalTracks ? 'error' : 'done') as DownloadStatus;
+        item.completedAt = new Date().toISOString();
+      } else if (item.tracks.some((t) => t.status === 'downloading' || t.status === 'converting')) {
+        item.status = 'active';
+      } else if (item.status !== 'queued') {
+        item.status = 'active';
+      }
     }
 
     this.emit('download:updated', { ...item, tracks: item.tracks.map((t) => ({ ...t })) });
@@ -242,7 +318,12 @@ export class DownloadQueue extends EventEmitter {
 
   private drain(): void {
     while (this.activeCount < CONCURRENCY && this.pendingTracks.length > 0) {
-      const next = this.pendingTracks.shift()!;
+      const next = this.pendingTracks[0];
+      if (this.pausedDownloads.has(next.downloadId)) {
+        this.pendingTracks.shift();
+        continue;
+      }
+      this.pendingTracks.shift();
       this.runTrack(next.downloadId, next.track, next.attempt);
     }
   }

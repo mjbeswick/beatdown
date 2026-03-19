@@ -11,8 +11,10 @@ import {
   RefreshCw,
   Trash2,
   Play,
+  Pause,
+  PauseCircle,
 } from 'lucide-react';
-import { $expandedRows, rowToggled, removeDownloadFx, redownloadFx } from '../stores/downloads';
+import { $expandedRows, rowToggled, removeDownloadFx, redownloadFx, pauseDownloadFx, resumeDownloadFx } from '../stores/downloads';
 import { playPlaylist, enqueueTrack } from '../stores/player';
 import type { DownloadItem } from '../../../shared/types';
 import TrackRow from './TrackRow';
@@ -36,6 +38,7 @@ function StatusDot({ status }: { status: DownloadItem['status'] }) {
     case 'fetching': return <Loader2 size={13} className="text-blue-400 animate-spin" />;
     case 'active':   return <Loader2 size={13} className="text-emerald-400 animate-spin" />;
     case 'queued':   return <Clock size={13} className="text-zinc-500" />;
+    case 'paused':   return <PauseCircle size={13} className="text-amber-400" />;
     case 'done':     return <CheckCircle2 size={13} className="text-emerald-400" />;
     case 'error':    return <AlertCircle size={13} className="text-red-400" />;
   }
@@ -150,13 +153,32 @@ export default function DownloadRow({ item }: Props) {
           {item.failedTracks > 0 && <span className="text-red-500 ml-1">{item.failedTracks}✗</span>}
         </div>
 
-        {/* Remove */}
-        <div className="w-7 shrink-0 flex items-center justify-center">
+        {/* Controls */}
+        <div className="w-16 shrink-0 flex items-center justify-end gap-0.5">
+          {(item.status === 'active' || item.status === 'queued' || item.status === 'fetching') && (
+            <button
+              onClick={(e) => { e.stopPropagation(); pauseDownloadFx(item.id); }}
+              title="Pause"
+              className="w-6 h-6 flex items-center justify-center text-zinc-600 hover:text-amber-400 opacity-0 group-hover:opacity-100 transition-all rounded"
+            >
+              <Pause size={12} />
+            </button>
+          )}
+          {item.status === 'paused' && (
+            <button
+              onClick={(e) => { e.stopPropagation(); resumeDownloadFx(item.id); }}
+              title="Resume"
+              className="w-6 h-6 flex items-center justify-center text-amber-400 hover:text-emerald-400 transition-all rounded"
+            >
+              <Play size={12} />
+            </button>
+          )}
           <button
             onClick={(e) => { e.stopPropagation(); removeDownloadFx(item.id); }}
-            className="w-5 h-5 flex items-center justify-center text-zinc-700 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all rounded"
+            title="Delete"
+            className="w-6 h-6 flex items-center justify-center text-zinc-700 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all rounded"
           >
-            <X size={12} />
+            <Trash2 size={12} />
           </button>
         </div>
       </div>

@@ -3,7 +3,7 @@
 export type AudioFormat = 'mp3' | 'aac' | 'm4a' | 'flac' | 'wav';
 export type QualityPreset = 'auto' | '320' | '256' | '192' | '128' | '96';
 export type TrackStatus = 'queued' | 'downloading' | 'converting' | 'done' | 'error';
-export type DownloadStatus = 'fetching' | 'queued' | 'active' | 'done' | 'error';
+export type DownloadStatus = 'fetching' | 'queued' | 'active' | 'done' | 'error' | 'paused';
 export type ContentType = 'track' | 'album' | 'playlist';
 
 export interface TrackInfo {

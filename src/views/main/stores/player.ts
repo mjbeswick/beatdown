@@ -151,6 +151,7 @@ export const $player = createStore<PlayerState>({
     const { queue, queueIndex, currentTime } = state;
     // If > 3s in, restart current track
     if (currentTime > 3) {
+      seek(0);
       return { ...state, currentTime: 0 };
     }
     const prevIdx = Math.max(0, queueIndex - 1);

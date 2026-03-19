@@ -1,4 +1,4 @@
-import { BrowserWindow, defineElectrobunRPC } from 'electrobun/bun';
+import Electrobun, { BrowserWindow, defineElectrobunRPC } from 'electrobun/bun';
 import type { DownloadItem, LyricLine } from '../shared/types';
 import type { AddDownloadParams } from '../shared/types';
 import type { ReelRPCSchema } from '../shared/rpc-schema';
@@ -15,6 +15,20 @@ import * as path from 'path';
 const streamServer = Bun.serve({
   port: 0, // auto-assign
   fetch(req) {
+    // Handle CORS preflight (OPTIONS). Required because audio elements with
+    // crossOrigin="anonymous" trigger pre-flight for non-safelisted Range values.
+    if (req.method === 'OPTIONS') {
+      return new Response(null, {
+        status: 204,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, OPTIONS',
+          'Access-Control-Allow-Headers': 'Range',
+          'Access-Control-Max-Age': '86400',
+        },
+      });
+    }
+
     const url = new URL(req.url);
     const filePath = decodeURIComponent(url.pathname.slice(1));
     const cleanPath = path.resolve(filePath);
@@ -86,6 +100,10 @@ logger.info(`Stream server listening on port ${streamPort}`);
 const rpc = defineElectrobunRPC<ReelRPCSchema, 'bun'>('bun', {
   handlers: {
     requests: {
+      'download:preview': async ({ url }) => {
+        return await getSpotifyContent(url);
+      },
+
       'download:add': async ({ url, format, quality }) => {
         rpc.proxy.send['download:fetching'](undefined as any);
         try {
@@ -110,6 +128,14 @@ const rpc = defineElectrobunRPC<ReelRPCSchema, 'bun'>('bun', {
         queue.redownload(id);
       },
 
+      'download:pause': ({ id }) => {
+        queue.pause(id);
+      },
+
+      'download:resume': ({ id }) => {
+        queue.resume(id);
+      },
+
       'downloads:getAll': () => {
         return queue.getAll();
       },
@@ -118,12 +144,37 @@ const rpc = defineElectrobunRPC<ReelRPCSchema, 'bun'>('bun', {
         queue.retryAllFailed();
       },
 
+      'downloads:resumeInterrupted': () => {
+        const count = queue.resumeInterrupted();
+        return { count };
+      },
+
+      'app:forceQuit': () => {
+        isForceQuitting = true;
+        confirmPending = false;
+        process.exit(0);
+      },
+
+      'app:cancelClose': () => {
+        confirmPending = false;
+      },
+
       'stream:getUrl': ({ filePath }) => {
         return `http://localhost:${streamPort}/${encodeURIComponent(filePath)}`;
       },
 
+      'stream:getPort': () => streamPort,
+
       'lyrics:get': ({ artist, title }) => {
         return getLyrics(artist, title);
+      },
+
+      'window:zoom': () => {
+        if (win.isMaximized()) {
+          win.unmaximize();
+        } else {
+          win.maximize();
+        }
       },
     },
   },
@@ -148,15 +199,37 @@ queue.on('download:removed', (id: string) => {
 queue.loadFromDisk();
 logger.info('Reel starting up...');
 
+// ── Close confirmation state ──────────────────────────────────────────────────
+
+let isForceQuitting = false;
+let confirmPending = false;
+let lastWindowFrame = { x: 100, y: 100, width: 1200, height: 800 };
+
 // ── Browser window ────────────────────────────────────────────────────────────
 
-const win = new BrowserWindow({
-  title: 'Reel',
-  frame: { x: 100, y: 100, width: 1200, height: 800 },
-  url: 'views://main/index.html',
-  rpc,
-  titleBarStyle: 'hiddenInset',
-});
+function createMainWindow() {
+  const newWin = new BrowserWindow({
+    title: 'Reel',
+    frame: { ...lastWindowFrame },
+    url: 'views://main/index.html',
+    rpc,
+    titleBarStyle: 'hiddenInset',
+  });
+
+  // Track window position/size so we can restore it if we need to reopen
+  newWin.on('resize', (event: any) => {
+    const d = event?.data;
+    if (d) lastWindowFrame = { x: d.x, y: d.y, width: d.width, height: d.height };
+  });
+  newWin.on('move', (event: any) => {
+    const d = event?.data;
+    if (d) { lastWindowFrame.x = d.x; lastWindowFrame.y = d.y; }
+  });
+
+  return newWin;
+}
+
+const win = createMainWindow();
 
 // Send stream port to webview once connected (small delay to allow ws handshake)
 setTimeout(() => {
@@ -166,3 +239,39 @@ setTimeout(() => {
 }, 500);
 
 logger.info(`Window created: ${win.id}`);
+
+// ── Quit confirmation ─────────────────────────────────────────────────────────
+
+// The 'before-quit' event fires after the last window is closed, just before the
+// process exits. It can be cancelled by setting event.response = { allow: false }.
+// We use this to show a confirmation modal when downloads are in progress.
+Electrobun.events.on('before-quit', (event: any) => {
+  if (isForceQuitting) return; // already confirmed by user – let it quit
+
+  if (confirmPending) {
+    // User closed the confirmation window without responding – treat as confirmed
+    isForceQuitting = true;
+    return;
+  }
+
+  const activeDownloads = queue.getAll().filter(
+    (d) => d.status === 'queued' || d.status === 'active'
+  );
+  if (activeDownloads.length === 0) return;
+
+  // Cancel the quit and re-open the main window with a confirm modal
+  event.response = { allow: false };
+  confirmPending = true;
+
+  const confirmWin = createMainWindow();
+  const activeCount = activeDownloads.length;
+
+  // Wait for the webview DOM to be ready before sending the close-request message
+  confirmWin.webview.on('dom-ready', () => {
+    setTimeout(() => {
+      try {
+        rpc.proxy.send['app:requestClose']({ activeCount });
+      } catch {}
+    }, 400);
+  });
+});

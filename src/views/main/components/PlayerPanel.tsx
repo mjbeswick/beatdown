@@ -22,6 +22,7 @@ import {
   toggleShuffle,
   toggleRepeat,
 } from '../stores/player';
+import { navToAlbum, navToArtist } from '../stores/nav';
 // Ensure audio engine is initialized
 import '../audio/engine';
 
@@ -43,18 +44,32 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
     <div className="shrink-0 h-16 bg-zinc-900 border-t border-zinc-700 flex items-center gap-4 px-4 z-10">
       {/* Track info */}
       <div className="flex items-center gap-2.5 w-52 shrink-0 min-w-0">
-        <div className="w-9 h-9 rounded bg-zinc-700 flex items-center justify-center shrink-0 overflow-hidden">
+        <button
+          onClick={() => navToAlbum(player.current!.downloadId)}
+          className="w-9 h-9 rounded bg-zinc-700 flex items-center justify-center shrink-0 overflow-hidden hover:ring-1 hover:ring-violet-500 transition-all"
+          title={`Go to album: ${player.current.albumName}`}
+        >
           {player.current.coverArt ? (
             <img src={player.current.coverArt} alt="" className="w-full h-full object-cover" />
           ) : (
             <Music2 size={14} className="text-zinc-500" />
           )}
-        </div>
+        </button>
         <div className="min-w-0">
-          <div className="text-zinc-200 text-xs font-medium truncate">
+          <button
+            onClick={() => navToAlbum(player.current!.downloadId)}
+            className="block text-zinc-200 text-xs font-medium truncate max-w-full hover:text-violet-400 transition-colors text-left"
+            title={player.current.track.title}
+          >
             {player.current.track.title}
-          </div>
-          <div className="text-zinc-500 text-[11px] truncate">{player.current.track.artist}</div>
+          </button>
+          <button
+            onClick={() => navToArtist(player.current!.track.artist)}
+            className="block text-zinc-500 text-[11px] truncate max-w-full hover:text-violet-400 transition-colors text-left"
+            title={player.current.track.artist}
+          >
+            {player.current.track.artist}
+          </button>
         </div>
       </div>
 

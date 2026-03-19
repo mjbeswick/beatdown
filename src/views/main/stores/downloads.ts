@@ -1,6 +1,6 @@
 import { createStore, createEvent, createEffect, combine } from 'effector';
 import { rpc } from '../rpc';
-import type { DownloadItem, AddDownloadParams } from '../../../shared/types';
+import type { DownloadItem, AddDownloadParams, SpotifyContent } from '../../../shared/types';
 
 export type FilterType = 'all' | 'active' | 'done' | 'error';
 export type AddPhase = 'idle' | 'fetching' | 'error';
@@ -13,11 +13,33 @@ export const downloadRemoved = createEvent<string>();
 export const filterChanged = createEvent<FilterType>();
 export const rowToggled = createEvent<string>();
 export const addPhaseSet = createEvent<{ phase: AddPhase; message?: string }>();
+export const searchChanged = createEvent<string>();
+export const previewClosed = createEvent();
+export const resumeBannerShown = createEvent();
+export const resumeBannerDismissed = createEvent();
+export const closeRequestReceived = createEvent<{ activeCount: number }>();
+export const closeRequestDismissed = createEvent();
 
 // ── Effects ───────────────────────────────────────────────────────────────────
 export const addDownloadFx = createEffect(async (params: AddDownloadParams) => {
   return rpc.proxy.request['download:add'](params);
 });
+
+export type PreviewPhase =
+  | { phase: 'loading' }
+  | { phase: 'ready'; data: SpotifyContent; url: string }
+  | { phase: 'error'; message: string };
+
+export const fetchPreviewFx = createEffect(async (url: string) => {
+  return rpc.proxy.request['download:preview']({ url });
+});
+
+export const $preview = createStore<PreviewPhase | null>(null)
+  .on(fetchPreviewFx, () => ({ phase: 'loading' }))
+  .on(fetchPreviewFx.done, (_, { params: url, result: data }) => ({ phase: 'ready', data, url }))
+  .on(fetchPreviewFx.fail, (_, { error }) => ({ phase: 'error', message: (error as Error).message }))
+  .reset(previewClosed)
+  .reset(addDownloadFx.done);
 
 export const removeDownloadFx = createEffect((id: string) => {
   return rpc.proxy.request['download:remove']({ id });
@@ -31,8 +53,28 @@ export const redownloadFx = createEffect((id: string) => {
   return rpc.proxy.request['download:redownload']({ id });
 });
 
+export const pauseDownloadFx = createEffect((id: string) => {
+  return rpc.proxy.request['download:pause']({ id });
+});
+
+export const resumeDownloadFx = createEffect((id: string) => {
+  return rpc.proxy.request['download:resume']({ id });
+});
+
 export const retryAllFailedFx = createEffect(() => {
   return rpc.proxy.request['downloads:retryFailed'](undefined as any);
+});
+
+export const resumeInterruptedFx = createEffect(async () => {
+  return rpc.proxy.request['downloads:resumeInterrupted'](undefined as any);
+});
+
+export const forceQuitFx = createEffect(async () => {
+  return rpc.proxy.request['app:forceQuit'](undefined as any);
+});
+
+export const cancelCloseFx = createEffect(async () => {
+  return rpc.proxy.request['app:cancelClose'](undefined as any);
 });
 
 export const loadAllFx = createEffect(async () => {
@@ -50,6 +92,7 @@ export const $downloads = createStore<DownloadItem[]>([])
   .on(loadAllFx.doneData, (_, items) => (items ? items : []));
 
 export const $filter = createStore<FilterType>('all').on(filterChanged, (_, f) => f);
+export const $search = createStore<string>('').on(searchChanged, (_, s) => s);
 
 export const $expandedRows = createStore<Set<string>>(new Set()).on(
   rowToggled,
@@ -86,6 +129,32 @@ export const $stats = $downloads.map((ds) => ({
   totalSpeed: ds.reduce((s, d) => s + (d.speed ?? 0), 0),
 }));
 
+// ── Resume banner state ───────────────────────────────────────────────────────
+// Shown once on startup/reconnect when interrupted downloads are detected.
+export const $showResumeBanner = createStore(false)
+  .on(resumeBannerShown, () => true)
+  .on(resumeBannerDismissed, () => false)
+  .reset(resumeInterruptedFx);
+
+// Show the banner the first time loadAllFx resolves with incomplete downloads.
+loadAllFx.doneData.watch((downloads) => {
+  if (!downloads) return;
+  const hasIncomplete = downloads.some(
+    (d) =>
+      (d.status === 'queued' || d.status === 'active') &&
+      d.tracks.some((t) => t.status === 'queued')
+  );
+  if (hasIncomplete) resumeBannerShown();
+});
+
+// ── Close-confirmation state ──────────────────────────────────────────────────
+// Set when bun sends 'app:requestClose' because the user tried to quit while
+// downloads were still in progress.
+export const $closeRequested = createStore<{ activeCount: number } | null>(null)
+  .on(closeRequestReceived, (_, data) => data)
+  .reset(closeRequestDismissed)
+  .reset(forceQuitFx);
+
 // ── RPC bindings ──────────────────────────────────────────────────────────────
 rpc.addMessageListener('downloads:state', (items) => stateReceived(items));
 rpc.addMessageListener('download:added', (item) => {
@@ -97,3 +166,4 @@ rpc.addMessageListener('download:removed', (id) => downloadRemoved(id));
 rpc.addMessageListener('download:fetching', () => addPhaseSet({ phase: 'fetching' }));
 rpc.addMessageListener('download:fetch_done', () => addPhaseSet({ phase: 'idle' }));
 rpc.addMessageListener('download:error', ({ message }) => addPhaseSet({ phase: 'error', message }));
+rpc.addMessageListener('app:requestClose', (data) => closeRequestReceived(data));

@@ -6,6 +6,7 @@ import ContextMenu from './ContextMenu';
 import { removeTrackFx } from '../stores/downloads';
 import {
   playTrack,
+  playPlaylist,
   playNext,
   enqueueTrack,
   $player,
@@ -63,7 +64,6 @@ export default function TrackRow({ track, downloadId, coverArt, albumName = '', 
       const doneTracks = allTracks.filter((t) => t.track.status === 'done');
       const idx = doneTracks.findIndex((t) => t.track.id === track.id);
       if (idx !== -1) {
-        const { playPlaylist } = require('../stores/player');
         playPlaylist({ tracks: doneTracks.map((t) => ({ track: t.track, downloadId: t.downloadId, coverArt: t.coverArt, albumName: t.albumName })), startIndex: idx });
         return;
       }
