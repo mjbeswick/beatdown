@@ -2,6 +2,8 @@ import { createEvent, createStore } from 'effector';
 
 export type VisualizerQualityPreset = 'performance' | 'balanced' | 'detail';
 export type VisualizerMeshDensity = 'sparse' | 'standard' | 'dense' | 'extreme';
+export type VisualizerCycleOrder = 'random' | 'sequential';
+export type VisualizerPresetPreference = 'default' | 'favorite' | 'hidden';
 
 export interface VisualizerSettings {
   presetName: string;
@@ -11,11 +13,15 @@ export interface VisualizerSettings {
   quality: VisualizerQualityPreset;
   fxaa: boolean;
   meshDensity: VisualizerMeshDensity;
+  cycleOrder: VisualizerCycleOrder;
+  presetPreferences: Record<string, VisualizerPresetPreference>;
 }
 
 const STORAGE_KEY = 'reel:visualizer';
 const QUALITY_PRESETS: VisualizerQualityPreset[] = ['performance', 'balanced', 'detail'];
 const MESH_DENSITIES: VisualizerMeshDensity[] = ['sparse', 'standard', 'dense', 'extreme'];
+const CYCLE_ORDERS: VisualizerCycleOrder[] = ['random', 'sequential'];
+const PRESET_PREFERENCES: VisualizerPresetPreference[] = ['default', 'favorite', 'hidden'];
 
 const DEFAULT_SETTINGS: VisualizerSettings = {
   presetName: '',
@@ -25,6 +31,8 @@ const DEFAULT_SETTINGS: VisualizerSettings = {
   quality: 'balanced',
   fxaa: false,
   meshDensity: 'standard',
+  cycleOrder: 'random',
+  presetPreferences: {},
 };
 
 function clamp(value: number, min: number, max: number): number {
@@ -32,6 +40,20 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 function sanitizeSettings(input: Partial<VisualizerSettings> | null | undefined): VisualizerSettings {
+  const rawPreferences =
+    input?.presetPreferences && typeof input.presetPreferences === 'object'
+      ? input.presetPreferences
+      : {};
+  const presetPreferences = Object.fromEntries(
+    Object.entries(rawPreferences).filter(
+      ([presetName, preference]) =>
+        typeof presetName === 'string' &&
+        typeof preference === 'string' &&
+        preference !== 'default' &&
+        PRESET_PREFERENCES.includes(preference as VisualizerPresetPreference)
+    )
+  ) as Record<string, VisualizerPresetPreference>;
+
   return {
     presetName: typeof input?.presetName === 'string' ? input.presetName : DEFAULT_SETTINGS.presetName,
     autoCycle: typeof input?.autoCycle === 'boolean' ? input.autoCycle : DEFAULT_SETTINGS.autoCycle,
@@ -54,6 +76,11 @@ function sanitizeSettings(input: Partial<VisualizerSettings> | null | undefined)
       typeof input?.meshDensity === 'string' && MESH_DENSITIES.includes(input.meshDensity as VisualizerMeshDensity)
         ? (input.meshDensity as VisualizerMeshDensity)
         : DEFAULT_SETTINGS.meshDensity,
+    cycleOrder:
+      typeof input?.cycleOrder === 'string' && CYCLE_ORDERS.includes(input.cycleOrder as VisualizerCycleOrder)
+        ? (input.cycleOrder as VisualizerCycleOrder)
+        : DEFAULT_SETTINGS.cycleOrder,
+    presetPreferences,
   };
 }
 
@@ -90,6 +117,11 @@ export const setVisualizerBlendSeconds = createEvent<number>();
 export const setVisualizerQuality = createEvent<VisualizerQualityPreset>();
 export const setVisualizerFXAA = createEvent<boolean>();
 export const setVisualizerMeshDensity = createEvent<VisualizerMeshDensity>();
+export const setVisualizerCycleOrder = createEvent<VisualizerCycleOrder>();
+export const setVisualizerPresetPreference = createEvent<{
+  presetName: string;
+  preference: VisualizerPresetPreference;
+}>();
 
 export const $visualizerSettings = createStore<VisualizerSettings>(loadSettings())
   .on(patchVisualizerSettings, (state, patch) => applyPatch(state, patch))
@@ -99,4 +131,11 @@ export const $visualizerSettings = createStore<VisualizerSettings>(loadSettings(
   .on(setVisualizerBlendSeconds, (state, blendSeconds) => applyPatch(state, { blendSeconds }))
   .on(setVisualizerQuality, (state, quality) => applyPatch(state, { quality }))
   .on(setVisualizerFXAA, (state, fxaa) => applyPatch(state, { fxaa }))
-  .on(setVisualizerMeshDensity, (state, meshDensity) => applyPatch(state, { meshDensity }));
+  .on(setVisualizerMeshDensity, (state, meshDensity) => applyPatch(state, { meshDensity }))
+  .on(setVisualizerCycleOrder, (state, cycleOrder) => applyPatch(state, { cycleOrder }))
+  .on(setVisualizerPresetPreference, (state, { presetName, preference }) => {
+    const presetPreferences = { ...state.presetPreferences };
+    if (preference === 'default') delete presetPreferences[presetName];
+    else presetPreferences[presetName] = preference;
+    return applyPatch(state, { presetPreferences });
+  });

@@ -1,17 +1,30 @@
 import { useEffect, useRef, useState } from 'react';
 import { useUnit } from 'effector-react';
-import { AudioWaveform, ChevronLeft, ChevronRight, Settings, Maximize, Minimize } from 'lucide-react';
+import {
+  AudioWaveform,
+  ChevronLeft,
+  ChevronRight,
+  EyeOff,
+  Heart,
+  Maximize,
+  Minimize,
+  Settings,
+} from 'lucide-react';
 import { $player } from '../stores/player';
 import {
   $visualizerSettings,
   setVisualizerAutoCycle,
   setVisualizerBlendSeconds,
   setVisualizerCycleSeconds,
+  setVisualizerPresetPreference,
   setVisualizerPresetName,
 } from '../stores/visualizer';
 import { getAnalyserNode, getAudioContext } from '../audio/engine';
 import {
+  getAdjacentVisualizerPresetName,
   getButterchurnLibrary,
+  getNextAutoCyclePresetName,
+  getVisualizerPresetPreference,
   getVisualizerRenderOptions,
   loadVisualizerPresets,
 } from '../lib/visualizer';
@@ -44,6 +57,12 @@ export default function VisualizerView() {
   const [showConfig, setShowConfig] = useState(false);
 
   const butterchurn = getButterchurnLibrary();
+  const currentPresetName =
+    presetNames[currentIdx] ??
+    (visualizerSettings.presetName || presetNamesRef.current[presetIdxRef.current] || '');
+  const currentPresetPreference = currentPresetName
+    ? getVisualizerPresetPreference(visualizerSettings, currentPresetName)
+    : 'default';
 
   const doLoadPreset = (idx: number, persist = true) => {
     const names = presetNamesRef.current;
@@ -54,6 +73,11 @@ export default function VisualizerView() {
     presetIdxRef.current = i;
     setCurrentIdx(i);
     if (persist) setVisualizerPresetName(presetName);
+  };
+
+  const loadPresetByName = (presetName: string, persist = true) => {
+    const idx = presetNamesRef.current.indexOf(presetName);
+    if (idx !== -1) doLoadPreset(idx, persist);
   };
 
   const applyRendererSettings = () => {
@@ -86,18 +110,40 @@ export default function VisualizerView() {
     clearTimeout(presetTimerRef.current);
     if (!autoCycleRef.current) return;
     presetTimerRef.current = setTimeout(() => {
-      doLoadPreset(presetIdxRef.current + 1);
+      const activePresetName = presetNamesRef.current[presetIdxRef.current] ?? presetNameRef.current;
+      const nextPresetName = getNextAutoCyclePresetName(
+        presetNamesRef.current,
+        activePresetName,
+        visualizerSettings
+      );
+      if (nextPresetName && nextPresetName !== activePresetName) {
+        loadPresetByName(nextPresetName);
+      }
       scheduleAutoCycle();
     }, cycleSecsRef.current * 1000);
   };
 
   const handleNext = () => {
-    doLoadPreset(presetIdxRef.current + 1);
+    const activePresetName = presetNamesRef.current[presetIdxRef.current] ?? presetNameRef.current;
+    const nextPresetName = getAdjacentVisualizerPresetName(
+      presetNamesRef.current,
+      activePresetName,
+      1,
+      visualizerSettings
+    );
+    if (nextPresetName) loadPresetByName(nextPresetName);
     scheduleAutoCycle();
   };
 
   const handlePrev = () => {
-    doLoadPreset(presetIdxRef.current - 1);
+    const activePresetName = presetNamesRef.current[presetIdxRef.current] ?? presetNameRef.current;
+    const prevPresetName = getAdjacentVisualizerPresetName(
+      presetNamesRef.current,
+      activePresetName,
+      -1,
+      visualizerSettings
+    );
+    if (prevPresetName) loadPresetByName(prevPresetName);
     scheduleAutoCycle();
   };
 
@@ -111,6 +157,39 @@ export default function VisualizerView() {
       containerRef.current?.requestFullscreen();
     } else {
       document.exitFullscreen();
+    }
+  };
+
+  const handleToggleFavorite = () => {
+    if (!currentPresetName) return;
+    const nextPreference =
+      currentPresetPreference === 'favorite' ? 'default' : 'favorite';
+    setVisualizerPresetPreference({ presetName: currentPresetName, preference: nextPreference });
+  };
+
+  const handleToggleHidden = () => {
+    if (!currentPresetName) return;
+
+    const nextPreference =
+      currentPresetPreference === 'hidden' ? 'default' : 'hidden';
+    setVisualizerPresetPreference({ presetName: currentPresetName, preference: nextPreference });
+
+    if (nextPreference === 'hidden') {
+      const nextSettings = {
+        ...visualizerSettings,
+        presetPreferences: {
+          ...visualizerSettings.presetPreferences,
+          [currentPresetName]: 'hidden' as const,
+        },
+      };
+      const replacementPresetName = getNextAutoCyclePresetName(
+        presetNamesRef.current,
+        currentPresetName,
+        nextSettings
+      );
+      if (replacementPresetName && replacementPresetName !== currentPresetName) {
+        loadPresetByName(replacementPresetName);
+      }
     }
   };
 
@@ -140,7 +219,12 @@ export default function VisualizerView() {
 
   useEffect(() => {
     if (vizRef.current) scheduleAutoCycle();
-  }, [visualizerSettings.autoCycle, visualizerSettings.cycleSeconds]);
+  }, [
+    visualizerSettings.autoCycle,
+    visualizerSettings.cycleSeconds,
+    visualizerSettings.cycleOrder,
+    visualizerSettings.presetPreferences,
+  ]);
 
   useEffect(() => {
     if (vizRef.current) applyRendererSettings();
@@ -274,6 +358,30 @@ export default function VisualizerView() {
             <option key={name} value={i}>{name}</option>
           ))}
         </select>
+
+        <button
+          onClick={handleToggleFavorite}
+          title={currentPresetPreference === 'favorite' ? 'Remove favorite' : 'Favorite preset'}
+          className={`transition-colors ${
+            currentPresetPreference === 'favorite'
+              ? 'text-rose-400'
+              : 'text-white/60 hover:text-white'
+          }`}
+        >
+          <Heart size={16} className={currentPresetPreference === 'favorite' ? 'fill-rose-400' : ''} />
+        </button>
+
+        <button
+          onClick={handleToggleHidden}
+          title={currentPresetPreference === 'hidden' ? 'Unhide preset' : 'Hide from auto-cycle'}
+          className={`transition-colors ${
+            currentPresetPreference === 'hidden'
+              ? 'text-amber-300'
+              : 'text-white/60 hover:text-white'
+          }`}
+        >
+          <EyeOff size={16} />
+        </button>
 
         <button
           onClick={() => setShowConfig(v => !v)}

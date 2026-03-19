@@ -67,6 +67,17 @@ body {
   background: #a1a1aa;
 }
 
+/* ── Light theme: text contrast fixes ─────────────────────────────────────── */
+/* In light mode the zinc token remapping leaves zinc-600 (#a1a1aa, ~2.4:1) and
+   zinc-700 (#e4e4e7, ~1.25:1) far below the WCAG 2.1 AA minimum of 4.5:1 on
+   white / near-white backgrounds.  bg-zinc-700 keeps its pale value so form
+   inputs and surface treatments stay light; only the text- utilities are
+   boosted to readable values (#52525b ≈ 7.7:1, #71717a ≈ 4.84:1). */
+.light-theme .text-zinc-600 { color: #52525b; }
+.light-theme .text-zinc-700 { color: #71717a; }
+/* Also fix the search-box placeholder which uses the same zinc-600 token. */
+.light-theme .placeholder\:text-zinc-600::placeholder { color: #52525b; }
+
 /* Range input */
 input[type="range"] {
   -webkit-appearance: none;

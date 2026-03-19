@@ -3,7 +3,9 @@ let butterchurnPresetPack: any = null;
 let presetCache: Record<string, unknown> | null = null;
 
 import type {
+  VisualizerCycleOrder,
   VisualizerMeshDensity,
+  VisualizerPresetPreference,
   VisualizerQualityPreset,
   VisualizerSettings,
 } from '../stores/visualizer';
@@ -110,4 +112,63 @@ export function loadVisualizerPresets(): Record<string, unknown> {
 
 export function getVisualizerPresetNames(): string[] {
   return Object.keys(loadVisualizerPresets());
+}
+
+export function getVisualizerPresetPreference(
+  settings: Pick<VisualizerSettings, 'presetPreferences'>,
+  presetName: string
+): VisualizerPresetPreference {
+  return settings.presetPreferences[presetName] ?? 'default';
+}
+
+export function getVisibleVisualizerPresetNames(
+  presetNames: string[],
+  settings: Pick<VisualizerSettings, 'presetPreferences'>
+): string[] {
+  return presetNames.filter((presetName) => getVisualizerPresetPreference(settings, presetName) !== 'hidden');
+}
+
+export function getAdjacentVisualizerPresetName(
+  presetNames: string[],
+  currentPresetName: string,
+  direction: 1 | -1,
+  settings: Pick<VisualizerSettings, 'presetPreferences'>
+): string | null {
+  const visiblePresetNames = getVisibleVisualizerPresetNames(presetNames, settings);
+  if (visiblePresetNames.length === 0) return null;
+
+  const currentIndex = visiblePresetNames.indexOf(currentPresetName);
+  if (currentIndex === -1) {
+    return direction === 1
+      ? visiblePresetNames[0]
+      : visiblePresetNames[visiblePresetNames.length - 1];
+  }
+
+  const nextIndex =
+    (currentIndex + direction + visiblePresetNames.length) % visiblePresetNames.length;
+  return visiblePresetNames[nextIndex] ?? null;
+}
+
+export function getNextAutoCyclePresetName(
+  presetNames: string[],
+  currentPresetName: string,
+  settings: Pick<VisualizerSettings, 'presetPreferences' | 'cycleOrder'>
+): string | null {
+  const visiblePresetNames = getVisibleVisualizerPresetNames(presetNames, settings);
+  if (visiblePresetNames.length === 0) return null;
+  if (visiblePresetNames.length === 1) return visiblePresetNames[0];
+
+  if (settings.cycleOrder === 'sequential') {
+    return getAdjacentVisualizerPresetName(presetNames, currentPresetName, 1, settings);
+  }
+
+  const candidates = visiblePresetNames.filter((presetName) => presetName !== currentPresetName);
+  if (candidates.length === 0) return currentPresetName;
+
+  const weightedPool = candidates.flatMap((presetName) =>
+    getVisualizerPresetPreference(settings, presetName) === 'favorite'
+      ? [presetName, presetName, presetName]
+      : [presetName]
+  );
+  return weightedPool[Math.floor(Math.random() * weightedPool.length)] ?? candidates[0];
 }

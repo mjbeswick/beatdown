@@ -10,12 +10,16 @@ import {
   setVisualizerAutoCycle,
   setVisualizerBlendSeconds,
   setVisualizerCycleSeconds,
+  setVisualizerCycleOrder,
   setVisualizerFXAA,
   setVisualizerMeshDensity,
   setVisualizerPresetName,
   setVisualizerQuality,
 } from '../stores/visualizer';
-import { getVisualizerPresetNames } from '../lib/visualizer';
+import {
+  getVisualizerPresetNames,
+  getVisibleVisualizerPresetNames,
+} from '../lib/visualizer';
 
 const FORMATS: { value: AudioFormat; label: string }[] = [
   { value: 'mp3', label: 'MP3' },
@@ -55,6 +59,11 @@ const VISUALIZER_MESH_DENSITIES = [
   { value: 'extreme', label: 'Extreme' },
 ] as const;
 
+const VISUALIZER_CYCLE_ORDERS = [
+  { value: 'random', label: 'Random' },
+  { value: 'sequential', label: 'Sequential' },
+] as const;
+
 export default function SettingsView() {
   const [theme, setTheme] = usePersistedState<ThemeOption>('reel:theme', 'system');
   const [format, setFormat] = usePersistedState<AudioFormat>('reel:format', 'm4a');
@@ -63,6 +72,13 @@ export default function SettingsView() {
   const [reelPaths, setReelPaths] = useState<ReelPaths | null>(null);
   const [browsing, setBrowsing] = useState<'library' | 'playlists' | null>(null);
   const presetNames = getVisualizerPresetNames();
+  const visiblePresetCount = getVisibleVisualizerPresetNames(presetNames, visualizerSettings).length;
+  const favoritePresetCount = Object.values(visualizerSettings.presetPreferences).filter(
+    (preference) => preference === 'favorite'
+  ).length;
+  const hiddenPresetCount = Object.values(visualizerSettings.presetPreferences).filter(
+    (preference) => preference === 'hidden'
+  ).length;
   const selectedPresetName =
     presetNames.includes(visualizerSettings.presetName)
       ? visualizerSettings.presetName
@@ -287,6 +303,22 @@ export default function SettingsView() {
           </div>
 
           <div className="flex items-center justify-between px-4 py-2.5 border-t border-zinc-700/40">
+            <span className="text-zinc-300 text-sm">Auto-cycle order</span>
+            <div className="relative">
+              <select
+                value={visualizerSettings.cycleOrder}
+                onChange={(e) => setVisualizerCycleOrder(e.target.value as typeof visualizerSettings.cycleOrder)}
+                className="bg-zinc-700/60 border border-zinc-600/50 rounded-lg text-sm text-zinc-300 px-3 py-1.5 pr-7 cursor-pointer hover:bg-zinc-700 transition-colors appearance-none outline-none"
+              >
+                {VISUALIZER_CYCLE_ORDERS.map((order) => (
+                  <option key={order.value} value={order.value}>{order.label}</option>
+                ))}
+              </select>
+              <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 text-xs">▾</span>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between px-4 py-2.5 border-t border-zinc-700/40">
             <span className="text-zinc-300 text-sm">Auto-cycle presets</span>
             <input
               type="checkbox"
@@ -294,6 +326,13 @@ export default function SettingsView() {
               onChange={(e) => setVisualizerAutoCycle(e.target.checked)}
               className="h-4 w-4 accent-emerald-500 cursor-pointer"
             />
+          </div>
+
+          <div className="px-4 py-2.5 border-t border-zinc-700/40 flex items-center justify-between text-xs">
+            <span className="text-zinc-500">Favorites / Hidden / Visible</span>
+            <span className="text-zinc-300 font-mono">
+              {favoritePresetCount} / {hiddenPresetCount} / {visiblePresetCount}
+            </span>
           </div>
 
           <div className="px-4 py-3 border-t border-zinc-700/40">
