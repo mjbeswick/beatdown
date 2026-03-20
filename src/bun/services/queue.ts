@@ -1,5 +1,6 @@
 import { EventEmitter } from 'events';
 import * as fs from 'fs';
+import * as path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import type {
   AudioFormat,
@@ -15,10 +16,12 @@ import {
   findExistingTrack,
   getArtistDir,
   getExpectedAudioExtension,
+  sanitizeFilename,
   type DownloadProgress,
 } from './downloader';
 import { logger } from '../logger';
 import { savePlaylist, deletePlaylist, loadAllPlaylists, calculateSizeOnDiskBytes } from './playlist';
+import { paths } from './paths';
 
 const CONCURRENCY = 3;
 const MAX_RETRIES = 2;
@@ -38,12 +41,128 @@ function getFileSizeBytes(filePath: string): number | undefined {
   }
 }
 
+function normalizeTrackPart(value: string): string {
+  return sanitizeFilename(value).toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+function getTrackReferenceKey(
+  track: Pick<TrackInfo, 'artist' | 'title'>,
+  format: AudioFormat
+): string {
+  const primaryArtist = track.artist.split(',')[0]?.trim() || track.artist;
+  return `${normalizeTrackPart(primaryArtist)}::${normalizeTrackPart(track.title)}::${format}`;
+}
+
 export class DownloadQueue extends EventEmitter {
   private items = new Map<string, DownloadItem>();
   private abortControllers = new Map<string, AbortController>();
   private activeCount = 0;
   private pendingTracks: Array<{ downloadId: string; track: TrackInfo; attempt: number }> = [];
   private pausedDownloads = new Set<string>();
+
+  private isExcludedTrack(
+    itemId: string,
+    trackId: string,
+    excluded?: { downloadId?: string; trackId?: string }
+  ): boolean {
+    if (!excluded?.downloadId || itemId !== excluded.downloadId) return false;
+    if (!excluded.trackId) return true;
+    return trackId === excluded.trackId;
+  }
+
+  private findReusableTrackFile(
+    track: Pick<TrackInfo, 'artist' | 'title'>,
+    format: AudioFormat,
+    excluded?: { downloadId?: string; trackId?: string }
+  ): string | null {
+    const referenceKey = getTrackReferenceKey(track, format);
+
+    for (const item of this.items.values()) {
+      if (item.format !== format) continue;
+
+      for (const candidate of item.tracks) {
+        if (this.isExcludedTrack(item.id, candidate.id, excluded)) continue;
+        if (getTrackReferenceKey(candidate, item.format) !== referenceKey) continue;
+        if (!candidate.filePath || !hasTrackFileForFormat(candidate, item.format)) continue;
+        return candidate.filePath;
+      }
+    }
+
+    return findExistingTrack(track.artist, track.title, format);
+  }
+
+  private isTrackReferencedElsewhere(
+    track: Pick<TrackInfo, 'artist' | 'title' | 'filePath'>,
+    format: AudioFormat,
+    excluded?: { downloadId?: string; trackId?: string }
+  ): boolean {
+    const resolvedPath = track.filePath ? path.resolve(track.filePath) : undefined;
+    const referenceKey = getTrackReferenceKey(track, format);
+
+    for (const item of this.items.values()) {
+      for (const candidate of item.tracks) {
+        if (this.isExcludedTrack(item.id, candidate.id, excluded)) continue;
+
+        if (resolvedPath && candidate.filePath && path.resolve(candidate.filePath) === resolvedPath) {
+          return true;
+        }
+
+        if (item.format === format && getTrackReferenceKey(candidate, item.format) === referenceKey) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  private pruneEmptyLibraryDirs(startDir: string): void {
+    const libraryRoot = path.resolve(paths.libraryDir);
+    let currentDir = path.resolve(startDir);
+
+    while (currentDir.startsWith(`${libraryRoot}${path.sep}`)) {
+      let entries: string[];
+      try {
+        entries = fs.readdirSync(currentDir);
+      } catch {
+        return;
+      }
+
+      if (entries.length > 0) return;
+
+      try {
+        fs.rmdirSync(currentDir);
+      } catch {
+        return;
+      }
+
+      currentDir = path.dirname(currentDir);
+    }
+  }
+
+  private deleteTrackFileIfUnreferenced(
+    track: Pick<TrackInfo, 'id' | 'artist' | 'title' | 'filePath'>,
+    format: AudioFormat,
+    excluded?: { downloadId?: string; trackId?: string }
+  ): void {
+    if (!track.filePath) return;
+
+    const filePath = path.resolve(track.filePath);
+    if (!fs.existsSync(filePath)) return;
+
+    if (this.isTrackReferencedElsewhere({ ...track, filePath }, format, excluded)) {
+      logger.debug(`Keeping shared track file: ${filePath}`);
+      return;
+    }
+
+    try {
+      fs.unlinkSync(filePath);
+      this.pruneEmptyLibraryDirs(path.dirname(filePath));
+      logger.info(`Deleted unreferenced track file: ${filePath}`);
+    } catch (err) {
+      logger.warn(`Failed to delete track file ${filePath}`, (err as Error).message);
+    }
+  }
 
   getAll(): DownloadItem[] {
     return [...this.items.values()].sort(
@@ -137,11 +256,24 @@ export class DownloadQueue extends EventEmitter {
     };
 
     this.items.set(id, item);
+
+    for (const track of item.tracks) {
+      const existingFile = this.findReusableTrackFile(track, format, { downloadId: id, trackId: track.id });
+      if (!existingFile || !fs.existsSync(existingFile)) continue;
+
+      track.status = 'done';
+      track.progress = 100;
+      track.filePath = existingFile;
+      track.fileSizeBytes = getFileSizeBytes(existingFile);
+    }
+
+    this.recalculate(item, false);
     this.emit('download:added', { ...item, tracks: tracks.map((t) => ({ ...t })) });
     savePlaylist(item);
     logger.info(`Added "${content.name}" (${tracks.length} tracks) [${format}/${quality}]`);
 
     for (const track of tracks) {
+      if (track.status !== 'queued') continue;
       this.pendingTracks.push({ downloadId: id, track, attempt: 0 });
     }
     this.drain();
@@ -209,8 +341,10 @@ export class DownloadQueue extends EventEmitter {
 
     const item = this.items.get(id);
     if (item) {
+      for (const track of item.tracks) {
+        this.deleteTrackFileIfUnreferenced(track, item.format, { downloadId: id });
+      }
       deletePlaylist(item);
-      // Note: we do NOT delete audio files from the Library — they may be shared
     }
 
     this.items.delete(id);
@@ -227,6 +361,7 @@ export class DownloadQueue extends EventEmitter {
       (p) => !(p.downloadId === downloadId && p.track.id === trackId)
     );
 
+    this.deleteTrackFileIfUnreferenced(track, item.format, { downloadId, trackId });
     item.tracks = item.tracks.filter((t) => t.id !== trackId);
 
     if (item.tracks.length === 0) {
@@ -252,12 +387,15 @@ export class DownloadQueue extends EventEmitter {
 
     let queuedTracks = 0;
     for (const track of item.tracks) {
-      const hasMatchingFile = hasTrackFileForFormat(track, item.format);
+      const reusableFile = hasTrackFileForFormat(track, item.format)
+        ? track.filePath
+        : this.findReusableTrackFile(track, item.format, { downloadId: id, trackId: track.id });
 
-      if (hasMatchingFile) {
-        const fileSizeBytes = track.filePath ? getFileSizeBytes(track.filePath) : undefined;
+      if (reusableFile && fs.existsSync(reusableFile)) {
+        const fileSizeBytes = getFileSizeBytes(reusableFile);
         track.status = 'done';
         track.progress = 100;
+        track.filePath = reusableFile;
         track.fileSizeBytes = fileSizeBytes;
         track.speed = undefined;
         track.eta = undefined;
@@ -334,7 +472,7 @@ export class DownloadQueue extends EventEmitter {
     }
   }
 
-  private recalculate(item: DownloadItem): void {
+  private recalculate(item: DownloadItem, emit = true): void {
     const isPaused = this.pausedDownloads.has(item.id);
     const totalTracks = item.tracks.length;
     item.totalTracks = totalTracks;
@@ -368,7 +506,9 @@ export class DownloadQueue extends EventEmitter {
       }
     }
 
-    this.emit('download:updated', { ...item, tracks: item.tracks.map((t) => ({ ...t })) });
+    if (emit) {
+      this.emit('download:updated', { ...item, tracks: item.tracks.map((t) => ({ ...t })) });
+    }
   }
 
   private drain(): void {
@@ -401,7 +541,7 @@ export class DownloadQueue extends EventEmitter {
     }
 
     // --- Dedup: check if this track already exists in the Library ---
-    const existing = findExistingTrack(track.artist, track.title, item.format);
+    const existing = this.findReusableTrackFile(track, item.format, { downloadId, trackId: track.id });
     if (existing && fs.existsSync(existing)) {
       logger.info(`Dedup hit: "${track.title}" → ${existing}`);
       this.mutateTrack(downloadId, track.id, {
@@ -447,6 +587,18 @@ export class DownloadQueue extends EventEmitter {
         signal,
         track.album ?? (item.type === 'album' ? item.name : undefined)
       );
+
+      const currentItem = this.items.get(downloadId);
+      const currentTrack = currentItem?.tracks.find((candidate) => candidate.id === track.id);
+      if (!currentTrack) {
+        this.deleteTrackFileIfUnreferenced(
+          { ...track, filePath },
+          item.format,
+          { downloadId, trackId: track.id }
+        );
+        logger.info(`Discarded unreferenced track file after removal: ${filePath}`);
+        return;
+      }
 
       this.mutateTrack(downloadId, track.id, {
         status: 'done',

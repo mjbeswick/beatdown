@@ -14,19 +14,29 @@ import PlayerPanel from './components/PlayerPanel';
 import LyricsPanel from './components/LyricsPanel';
 import StatusBar from './components/StatusBar';
 import ErrorModal from './components/ErrorModal';
-import DownloadPreviewModal from './components/DownloadPreviewModal';import CloseConfirmModal from './components/CloseConfirmModal';import { $nav } from './stores/nav';
+import DownloadPreviewModal from './components/DownloadPreviewModal';
+import CloseConfirmModal from './components/CloseConfirmModal';
+import { $nav } from './stores/nav';
 import { loadAllFx } from './stores/downloads';
 import { loadSettingsFx } from './stores/settingsLoader';
 import { $player, togglePlay, next, prev, seek, setVolume } from './stores/player';
 import { $theme } from './stores/theme';
+import { usePersistedState } from './hooks/usePersistedState';
 import './audio/engine'; // initialize audio engine
 import './audio/djEngine'; // initialize DJ crossfade/beatmatch engine
+
+type NowPlayingSidebarTab = 'queue' | 'lyrics';
 
 export default function App() {
   const nav = useUnit($nav);
   const player = useUnit($player);
   const theme = useUnit($theme);
   const [lyricsOpen, setLyricsOpen] = useState(false);
+  const [nowPlayingSidebarVisible, setNowPlayingSidebarVisible] = usePersistedState(
+    'reel:now-playing-sidebar-visible',
+    true
+  );
+  const [nowPlayingSidebarTab, setNowPlayingSidebarTab] = useState<NowPlayingSidebarTab>('queue');
 
   // Apply and track the selected theme across the entire app lifetime.
   useEffect(() => {
@@ -49,6 +59,12 @@ export default function App() {
     loadSettingsFx();
     loadAllFx();
   }, []);
+
+  useEffect(() => {
+    if (nav === 'nowplaying' && lyricsOpen) {
+      setLyricsOpen(false);
+    }
+  }, [lyricsOpen, nav]);
 
   // Global keyboard shortcuts
   useEffect(() => {
@@ -83,6 +99,28 @@ export default function App() {
   }, [player.currentTime, player.duration, player.volume]);
 
   const hasPlayer = !!player.current;
+  const globalLyricsOpen = nav === 'nowplaying' ? false : lyricsOpen;
+  const lyricsVisible =
+    nav === 'nowplaying'
+      ? nowPlayingSidebarVisible && nowPlayingSidebarTab === 'lyrics'
+      : globalLyricsOpen;
+
+  const handleLyricsToggle = () => {
+    if (nav === 'nowplaying') {
+      setLyricsOpen(false);
+
+      if (nowPlayingSidebarVisible && nowPlayingSidebarTab === 'lyrics') {
+        setNowPlayingSidebarVisible(false);
+      } else {
+        setNowPlayingSidebarVisible(true);
+        setNowPlayingSidebarTab('lyrics');
+      }
+
+      return;
+    }
+
+    setLyricsOpen((isOpen) => !isOpen);
+  };
 
   return (
     <div className="flex flex-col h-screen bg-zinc-900 overflow-hidden select-none">
@@ -92,7 +130,14 @@ export default function App() {
         <Sidebar />
 
         <div className="flex-1 flex overflow-hidden relative">
-          {nav === 'nowplaying' && <NowPlayingView />}
+          {nav === 'nowplaying' && (
+            <NowPlayingView
+              showSidebar={nowPlayingSidebarVisible}
+              onShowSidebarChange={setNowPlayingSidebarVisible}
+              activeTab={nowPlayingSidebarTab}
+              onTabChange={setNowPlayingSidebarTab}
+            />
+          )}
           {nav === 'playlists' && <PlaylistsView />}
           {nav === 'albums' && <AlbumsView />}
           {nav === 'artists' && <ArtistsView />}
@@ -102,14 +147,14 @@ export default function App() {
           {nav === 'settings' && <SettingsView />}
 
           {/* Lyrics panel slides in from right */}
-          <LyricsPanel isOpen={lyricsOpen} onClose={() => setLyricsOpen(false)} />
+          <LyricsPanel isOpen={globalLyricsOpen} onClose={() => setLyricsOpen(false)} />
         </div>
       </div>
 
       {hasPlayer ? (
         <PlayerPanel
-          onLyricsToggle={() => setLyricsOpen((v) => !v)}
-          lyricsOpen={lyricsOpen}
+          onLyricsToggle={handleLyricsToggle}
+          lyricsOpen={lyricsVisible}
         />
       ) : (
         <StatusBar />

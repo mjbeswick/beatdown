@@ -96,17 +96,6 @@ export default function TrackRow({ track, downloadId, coverArt, albumName = '', 
         <TrackIcon status={track.status} />
       )}
 
-      {/* Favourite button — only shown for done tracks */}
-      {isDone && (
-        <button
-          className={`shrink-0 transition-opacity ${isFavourited ? 'opacity-100' : 'opacity-0 group-hover:opacity-40 hover:!opacity-100'}`}
-          onClick={(e) => { e.stopPropagation(); toggleFavourite(track.id); }}
-          onDoubleClick={(e) => e.stopPropagation()}
-        >
-          <Heart size={11} className={isFavourited ? 'fill-rose-500 text-rose-500' : 'text-zinc-400'} />
-        </button>
-      )}
-
       {/* Title + artist */}
       <div className="flex-1 min-w-0">
         <div className="truncate text-xs leading-tight">
@@ -117,30 +106,38 @@ export default function TrackRow({ track, downloadId, coverArt, albumName = '', 
 
       {isActive && (
         <div className="ml-auto flex shrink-0 items-center justify-end gap-3 pl-3">
-          {/* Progress bar */}
-          <div className="w-40 shrink-0 text-right">
-            <div className="text-xs text-zinc-600 font-mono tabular-nums mb-0.5">{track.progress}%</div>
-            <div className="ml-auto h-1 bg-zinc-700 rounded-full overflow-hidden">
+          <div className="w-72 shrink-0 flex items-center gap-2">
+            <div className="w-10 shrink-0 text-right text-xs text-zinc-600 font-mono tabular-nums">
+              {track.progress}%
+            </div>
+            <div className="h-1 flex-1 bg-zinc-700 rounded-full overflow-hidden">
               <div
                 className="h-full bg-emerald-500 rounded-full transition-all duration-300"
                 style={{ width: `${track.progress}%` }}
               />
             </div>
+            <div className="w-20 shrink-0 text-right font-mono text-xs text-zinc-600 tabular-nums">
+              {showSpeed ? fmtSpeed(track.speed!) : ''}
+            </div>
           </div>
 
-          {showSpeed && (
-            <div className="w-24 shrink-0 text-right font-mono text-xs text-zinc-600 tabular-nums">
-              {fmtSpeed(track.speed!)}
-            </div>
-          )}
-
-          {showEta && (
-            <div className="w-16 shrink-0 text-right font-mono text-xs text-zinc-600 tabular-nums">
-              {fmtEta(track.eta!)}
-            </div>
-          )}
+          <div className="w-16 shrink-0 text-right font-mono text-xs text-zinc-600 tabular-nums">
+            {showEta ? fmtEta(track.eta!) : ''}
+          </div>
         </div>
       )}
+
+      <div className="w-5 shrink-0 flex items-center justify-end">
+        {isDone && (
+          <button
+            className={`shrink-0 transition-opacity ${isFavourited ? 'opacity-100' : 'opacity-0 group-hover:opacity-40 hover:!opacity-100'}`}
+            onClick={(e) => { e.stopPropagation(); toggleFavourite(track.id); }}
+            onDoubleClick={(e) => e.stopPropagation()}
+          >
+            <Heart size={11} className={isFavourited ? 'fill-rose-500 text-rose-500' : 'text-zinc-400'} />
+          </button>
+        )}
+      </div>
 
       {pos && downloadId && (
         <ContextMenu

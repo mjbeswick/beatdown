@@ -117,11 +117,15 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
 
   return (
     <div
-      className="shrink-0 bg-zinc-800/70 border-t border-zinc-700/60 flex items-center gap-4 px-4 z-10"
-      style={{ height: playerPanelHeight, paddingBlock: PLAYER_PANEL_VERTICAL_PADDING }}
+      className="shrink-0 bg-zinc-800/70 border-t border-zinc-700/60 grid items-center gap-x-5 px-4 z-10"
+      style={{
+        height: playerPanelHeight,
+        paddingBlock: PLAYER_PANEL_VERTICAL_PADDING,
+        gridTemplateColumns: 'minmax(0, 1fr) minmax(24rem, 46rem) minmax(0, 1fr)',
+      }}
     >
       {/* Track info */}
-      <div className="flex items-center gap-2.5 w-52 shrink-0 min-w-0">
+      <div className="flex min-w-0 w-full max-w-[24rem] items-center gap-2.5 justify-self-start">
         <button
           onClick={() => navToAlbum(player.current!.downloadId)}
           className="w-9 h-9 rounded bg-zinc-700 flex items-center justify-center shrink-0 overflow-hidden hover:ring-1 hover:ring-violet-500 transition-all"
@@ -133,7 +137,7 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
             <Music2 size={14} className="text-zinc-500" />
           )}
         </button>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <button
             onClick={() => navToAlbum(player.current!.downloadId)}
             className="block text-zinc-200 text-xs font-medium truncate max-w-full hover:text-emerald-500 transition-colors text-left"
@@ -166,8 +170,8 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
       </div>
 
       {/* Controls + seeker */}
-      <div className="flex min-w-0 flex-1 flex-col gap-2">
-        <div className="flex items-center justify-center gap-4">
+      <div className="flex min-w-0 w-full flex-col gap-1.5">
+        <div className="flex items-center justify-center gap-3.5">
           <button
             onClick={() => toggleShuffle()}
             className={`transition-colors ${
@@ -218,7 +222,7 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
         </div>
 
         {/* Seeker */}
-        <div className="flex w-full max-w-[clamp(34rem,74vw,80rem)] items-center gap-3 self-center">
+        <div className="flex w-full max-w-[clamp(28rem,56vw,42rem)] items-center gap-2.5 self-center">
           <span className="text-zinc-600 text-[10px] tabular-nums font-mono w-8 text-right shrink-0">
             {elapsed}
           </span>
@@ -245,7 +249,7 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
       </div>
 
       {/* Volume + lyrics + cast */}
-      <div className="flex items-center gap-2 w-36 justify-end shrink-0">
+      <div className="flex min-w-0 w-full max-w-[24rem] items-center justify-end gap-1.5 justify-self-end">
         <button
           onClick={() => setVolume(player.volume > 0 ? 0 : (player.lastVolume || 0.8))}
           className="text-zinc-500 hover:text-zinc-300 transition-colors shrink-0"

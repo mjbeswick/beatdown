@@ -26,17 +26,26 @@ import type { LyricLine } from '../../../shared/types';
 import ContextMenu, { type ContextMenuEntry } from './ContextMenu';
 import ResizablePaneLayout from './ResizablePaneLayout';
 import { useContextMenu } from '../hooks/useContextMenu';
-import { usePersistedState } from '../hooks/usePersistedState';
 
 type Tab = 'queue' | 'lyrics';
 
-export default function NowPlayingView() {
+interface Props {
+  showSidebar: boolean;
+  onShowSidebarChange: (visible: boolean) => void;
+  activeTab: Tab;
+  onTabChange: (tab: Tab) => void;
+}
+
+export default function NowPlayingView({
+  showSidebar,
+  onShowSidebarChange: setShowSidebar,
+  activeTab: tab,
+  onTabChange: setTab,
+}: Props) {
   const player = useUnit($player);
   const favourites = useUnit($favourites);
   const search = useUnit($search);
   const { pos: albumArtMenuPos, open: openAlbumArtMenu, close: closeAlbumArtMenu } = useContextMenu();
-  const [tab, setTab] = useState<Tab>('queue');
-  const [showSidebar, setShowSidebar] = usePersistedState('reel:now-playing-sidebar-visible', true);
   const [showConfig, setShowConfig] = useState(false);
   const [lyrics, setLyrics] = useState<LyricLine[] | null>(null);
   const [lyricsLoading, setLyricsLoading] = useState(false);

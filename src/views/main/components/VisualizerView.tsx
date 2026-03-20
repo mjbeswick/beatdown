@@ -685,7 +685,9 @@ export default function VisualizerView() {
   return (
     <main
       ref={containerRef}
-      className="flex-1 relative overflow-hidden bg-black"
+      className={`visualizer-view flex-1 relative overflow-hidden bg-black ${
+        showOverlay ? '' : 'visualizer-view--controls-hidden'
+      }`}
       onPointerMove={revealOverlay}
       onPointerDown={revealOverlay}
       onDoubleClick={handleVisualizerDoubleClick}

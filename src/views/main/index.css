@@ -171,3 +171,8 @@ select {
 * {
   -webkit-tap-highlight-color: transparent;
 }
+
+.visualizer-view:fullscreen.visualizer-view--controls-hidden,
+.visualizer-view:-webkit-full-screen.visualizer-view--controls-hidden {
+  cursor: none;
+}

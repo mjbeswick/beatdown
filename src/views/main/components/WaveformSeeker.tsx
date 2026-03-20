@@ -43,6 +43,10 @@ export default function WaveformSeeker({ className = 'w-full min-w-0' }: Props) 
   useEffect(() => {
     if (!containerRef.current) return;
 
+    // WaveSurfer scales barWidth/barGap by devicePixelRatio internally but does
+    // NOT scale barRadius — compensate so rounding is consistent on retina displays.
+    const dpr = window.devicePixelRatio || 1;
+
     const ws = WaveSurfer.create({
       container: containerRef.current,
       waveColor: 'rgba(113, 113, 122, 0.42)',
@@ -50,7 +54,7 @@ export default function WaveformSeeker({ className = 'w-full min-w-0' }: Props) 
       cursorWidth: 0,
       barWidth: waveformBarWidth,
       barGap: waveformBarGap,
-      barRadius,
+      barRadius: barRadius * dpr,
       height: waveformHeight,
       normalize: true,
       interact: true,
