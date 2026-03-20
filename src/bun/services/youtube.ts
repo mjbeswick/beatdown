@@ -35,10 +35,15 @@ function extractYouTubeVideoUrl(entry: Record<string, unknown>): string | undefi
   return rawUrl;
 }
 
-function pickBestThumbnailUrl(value: unknown): string | undefined {
-  if (!Array.isArray(value)) return undefined;
+interface ThumbnailCandidate {
+  url: string;
+  score: number;
+}
 
-  const thumbnails = value
+function collectThumbnailCandidates(value: unknown): ThumbnailCandidate[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
     .map((item) => {
       if (!item || typeof item !== 'object') return null;
       const thumbnail = item as Record<string, unknown>;
@@ -49,8 +54,46 @@ function pickBestThumbnailUrl(value: unknown): string | undefined {
       const height = typeof thumbnail['height'] === 'number' ? thumbnail['height'] : 0;
       return { url, score: width * height };
     })
-    .filter((item): item is { url: string; score: number } => item !== null)
+    .filter((item): item is ThumbnailCandidate => item !== null)
     .sort((a, b) => b.score - a.score);
+}
+
+async function canLoadThumbnail(url: string): Promise<boolean> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+
+  try {
+    const response = await fetch(url, {
+      method: 'HEAD',
+      redirect: 'follow',
+      signal: controller.signal,
+    });
+
+    if (response.ok) return true;
+    if (response.status !== 403 && response.status !== 405) return false;
+
+    const fallback = await fetch(url, {
+      method: 'GET',
+      headers: { Range: 'bytes=0-0' },
+      redirect: 'follow',
+      signal: controller.signal,
+    });
+
+    return fallback.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function pickBestThumbnailUrl(value: unknown): Promise<string | undefined> {
+  const thumbnails = collectThumbnailCandidates(value);
+  if (thumbnails.length === 0) return undefined;
+
+  for (const thumbnail of thumbnails) {
+    if (await canLoadThumbnail(thumbnail.url)) return thumbnail.url;
+  }
 
   return thumbnails[0]?.url;
 }
@@ -172,7 +215,7 @@ export async function getYouTubePlaylistContent(url: string): Promise<SpotifyCon
   }
 
   const name = getString(playlist['title']) ?? 'YouTube Music Playlist';
-  const coverArt = pickBestThumbnailUrl(playlist['thumbnails']);
+  const coverArt = await pickBestThumbnailUrl(playlist['thumbnails']);
 
   logger.info(`Extracted "${name}": ${tracks.length} track(s) from YouTube Music`);
 
