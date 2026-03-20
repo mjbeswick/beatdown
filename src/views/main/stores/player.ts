@@ -15,6 +15,12 @@ export interface PlayingTrack {
   albumName: string;
 }
 
+interface PlayPlaylistParams {
+  tracks: PlayingTrack[];
+  startIndex: number;
+  pinStartTrack?: boolean;
+}
+
 interface FollowPlaylistState {
   downloadId: string;
   albumName: string;
@@ -63,7 +69,7 @@ interface PlayerState {
 
 // ── Events ────────────────────────────────────────────────────────────────────
 export const playTrack = createEvent<PlayingTrack>();
-export const playPlaylist = createEvent<{ tracks: PlayingTrack[]; startIndex: number }>();
+export const playPlaylist = createEvent<PlayPlaylistParams>();
 export const playDownloadPlaylist = createEvent<DownloadItem>();
 export const enqueueTrack = createEvent<PlayingTrack>();
 export const playNext = createEvent<PlayingTrack>();
@@ -344,7 +350,8 @@ function restorePlayerSessionFromDownloads(
     current,
     queue,
     queueIndex: current ? queue.indexOf(current) : 0,
-    isPlaying: snapshot.isPlaying,
+    // Restore the queue and position, but require an explicit user action to resume after launch.
+    isPlaying: false,
     currentTime: Math.max(0, snapshot.currentTime),
     followPlaylist,
   };
@@ -363,6 +370,46 @@ function getPlayableTracks(item: Pick<DownloadItem, 'id' | 'coverArt' | 'name' |
   return item.tracks
     .filter((track) => track.status === 'done')
     .map((track) => asPlayingTrack(track, item));
+}
+
+function shuffleTracks<T>(tracks: T[]): T[] {
+  const shuffled = [...tracks];
+
+  for (let idx = shuffled.length - 1; idx > 0; idx--) {
+    const swapIndex = Math.floor(Math.random() * (idx + 1));
+    [shuffled[idx], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[idx]];
+  }
+
+  return shuffled;
+}
+
+function buildPlaybackQueue(
+  tracks: PlayingTrack[],
+  options: Pick<PlayPlaylistParams, 'startIndex' | 'pinStartTrack'> & { shuffle: ShuffleMode }
+): { queue: PlayingTrack[]; queueIndex: number } {
+  if (tracks.length === 0) {
+    return { queue: [], queueIndex: -1 };
+  }
+
+  const startIndex = Math.max(0, Math.min(options.startIndex, tracks.length - 1));
+  if (options.shuffle === 'off') {
+    return { queue: tracks, queueIndex: startIndex };
+  }
+
+  if (options.pinStartTrack) {
+    const startTrack = tracks[startIndex];
+    const remainingTracks = tracks.filter((_, idx) => idx !== startIndex);
+
+    return {
+      queue: [startTrack, ...shuffleTracks(remainingTracks)],
+      queueIndex: 0,
+    };
+  }
+
+  return {
+    queue: shuffleTracks(tracks),
+    queueIndex: 0,
+  };
 }
 
 const $followPlaylist = createStore<FollowPlaylistState | null>(null)
@@ -435,13 +482,19 @@ export const $player = createStore<PlayerState>({
     isPlaying: true,
     currentTime: 0,
   }))
-  .on(playPlaylist, (state, { tracks, startIndex }) => {
-    const idx = Math.max(0, Math.min(startIndex, tracks.length - 1));
+  .on(playPlaylist, (state, { tracks, startIndex, pinStartTrack = false }) => {
+    const { queue, queueIndex } = buildPlaybackQueue(tracks, {
+      startIndex,
+      pinStartTrack,
+      shuffle: state.shuffle,
+    });
+    const current = queue[queueIndex] ?? null;
+
     return {
       ...state,
-      current: tracks[idx],
-      queue: tracks,
-      queueIndex: idx,
+      current,
+      queue,
+      queueIndex,
       isPlaying: true,
       currentTime: 0,
     };
@@ -450,11 +503,17 @@ export const $player = createStore<PlayerState>({
     const tracks = getPlayableTracks(item);
     if (tracks.length === 0) return state;
 
+    const { queue, queueIndex } = buildPlaybackQueue(tracks, {
+      startIndex: 0,
+      shuffle: state.shuffle,
+    });
+    const current = queue[queueIndex] ?? null;
+
     return {
       ...state,
-      current: tracks[0],
-      queue: tracks,
-      queueIndex: 0,
+      current,
+      queue,
+      queueIndex,
       isPlaying: true,
       currentTime: 0,
     };
@@ -478,7 +537,19 @@ export const $player = createStore<PlayerState>({
   .on(toggleShuffle, (state) => {
     const shuffle: ShuffleMode = state.shuffle === 'off' ? 'on' : 'off';
     savePref('reel:shuffle', shuffle);
-    return { ...state, shuffle };
+
+    if (shuffle === 'off' || state.queue.length <= 1) {
+      return { ...state, shuffle };
+    }
+
+    const playedTracks = state.queue.slice(0, state.queueIndex + 1);
+    const upcomingTracks = shuffleTracks(state.queue.slice(state.queueIndex + 1));
+
+    return {
+      ...state,
+      shuffle,
+      queue: [...playedTracks, ...upcomingTracks],
+    };
   })
   .on(toggleRepeat, (state) => {
     const modes: RepeatMode[] = ['off', 'one', 'all'];
@@ -493,18 +564,13 @@ export const $player = createStore<PlayerState>({
   }))
   .on(streamPortReceived, (state, port) => ({ ...state, streamPort: port }))
   .on(next, (state) => {
-    const { queue, queueIndex, shuffle, repeat } = state;
+    const { queue, queueIndex, repeat } = state;
     if (queue.length === 0) return state;
 
-    let nextIdx: number;
-    if (shuffle === 'on') {
-      nextIdx = Math.floor(Math.random() * queue.length);
-    } else {
-      nextIdx = queueIndex + 1;
-      if (nextIdx >= queue.length) {
-        if (repeat === 'all') nextIdx = 0;
-        else return { ...state, isPlaying: false };
-      }
+    let nextIdx = queueIndex + 1;
+    if (nextIdx >= queue.length) {
+      if (repeat === 'all') nextIdx = 0;
+      else return { ...state, isPlaying: false };
     }
 
     return {
@@ -560,24 +626,21 @@ export const $player = createStore<PlayerState>({
 
     return {
       ...state,
-      queue: [...state.queue, ...payload.tracks],
+      queue: [...state.queue, ...(state.shuffle === 'on' ? shuffleTracks(payload.tracks) : payload.tracks)],
     };
   })
   .on(trackEnded, (state) => {
-    const { queue, queueIndex, repeat, shuffle } = state;
+    const { queue, queueIndex, repeat } = state;
     if (repeat === 'one') {
       return { ...state, currentTime: 0, isPlaying: true };
     }
-    let nextIdx: number;
-    if (shuffle === 'on') {
-      nextIdx = Math.floor(Math.random() * queue.length);
-    } else {
-      nextIdx = queueIndex + 1;
-    }
+
+    let nextIdx = queueIndex + 1;
     if (nextIdx >= queue.length) {
       if (repeat === 'all') nextIdx = 0;
       else return { ...state, isPlaying: false };
     }
+
     return {
       ...state,
       current: queue[nextIdx],

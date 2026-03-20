@@ -3,6 +3,7 @@ import {
   ChevronRight,
   ChevronDown,
   X,
+  ListMusic,
   Music2,
   AlertCircle,
   CheckCircle2,
@@ -197,7 +198,7 @@ export default function DownloadRow({ item }: Props) {
           items={[
             ...(doneTracks.length > 0 ? [
               { label: 'Play All', icon: <Play size={13} />, onClick: playAll },
-              { label: 'Enqueue All', onClick: enqueueAll },
+              { label: 'Enqueue All', icon: <ListMusic size={13} />, onClick: enqueueAll },
               { separator: true as const },
             ] : []),
             {

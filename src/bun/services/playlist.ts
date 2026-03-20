@@ -49,6 +49,37 @@ function toAbsolutePath(stored: string, m3uPath: string): string {
   return path.resolve(path.dirname(m3uPath), stored);
 }
 
+function getFileSizeBytes(filePath: string): number | undefined {
+  try {
+    const stats = fs.statSync(filePath);
+    return stats.isFile() ? stats.size : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function calculateSizeOnDiskBytes(
+  tracks: Array<Pick<TrackInfo, 'status' | 'filePath' | 'fileSizeBytes'>>
+): number {
+  const seenPaths = new Set<string>();
+  let total = 0;
+
+  for (const track of tracks) {
+    if (track.status !== 'done' || !track.filePath) continue;
+
+    const resolvedPath = path.resolve(track.filePath);
+    if (seenPaths.has(resolvedPath)) continue;
+
+    seenPaths.add(resolvedPath);
+
+    if (typeof track.fileSizeBytes === 'number' && Number.isFinite(track.fileSizeBytes)) {
+      total += track.fileSizeBytes;
+    }
+  }
+
+  return total;
+}
+
 export function savePlaylist(item: DownloadItem): void {
   fs.mkdirSync(paths.playlistsDir, { recursive: true });
   const fileName = sanitizeFilename(item.name) + '.m3u';
@@ -225,6 +256,7 @@ function parseM3U(filePath: string): DownloadItem | null {
 
   for (const d of doneEntries) {
     const exists = d.filePath ? fs.existsSync(d.filePath) : false;
+    const fileSizeBytes = exists ? getFileSizeBytes(d.filePath) : undefined;
     allTracks.push({
       id: d.id,
       index: d.index,
@@ -233,6 +265,7 @@ function parseM3U(filePath: string): DownloadItem | null {
       status: exists ? 'done' : 'queued',
       progress: exists ? 100 : 0,
       filePath: exists ? d.filePath : undefined,
+      fileSizeBytes,
     });
   }
 
@@ -241,6 +274,7 @@ function parseM3U(filePath: string): DownloadItem | null {
   const completedTracks = allTracks.filter((t) => t.status === 'done').length;
   const totalTracks = allTracks.length;
   const progress = totalTracks > 0 ? Math.round((completedTracks / totalTracks) * 100) : 0;
+  const sizeOnDiskBytes = calculateSizeOnDiskBytes(allTracks);
 
   const resolvedStatus: DownloadStatus =
     completedTracks === totalTracks && totalTracks > 0
@@ -261,6 +295,7 @@ function parseM3U(filePath: string): DownloadItem | null {
     totalTracks,
     completedTracks,
     failedTracks: 0,
+    sizeOnDiskBytes,
     addedAt,
     format,
     quality,

@@ -1,122 +1,67 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import WaveSurfer from 'wavesurfer.js';
-import ZoomPlugin from 'wavesurfer.js/dist/plugins/zoom.esm.js';
 import { useUnit } from 'effector-react';
 import { $player, seek, getStreamUrl } from '../stores/player';
-import { $appSettings } from '../stores/appSettings';
-import { usePersistedState } from '../hooks/usePersistedState';
+import { $appSettings, getWaveformBarRadius } from '../stores/appSettings';
 
 const SKELETON_HEIGHTS = Array.from(
-  { length: 64 },
-  (_, i) => 25 + Math.abs(Math.sin(i * 0.45 + 0.3)) * 60,
+  { length: 56 },
+  (_, i) => 30 + Math.abs(Math.sin(i * 0.52 + 0.4)) * 52,
 );
 
-function calcHeight(width: number): number {
-  return Math.round(Math.max(80, Math.min(160, width * 0.15)));
+interface Props {
+  className?: string;
 }
 
-export default function WaveformSeeker() {
+export default function WaveformSeeker({ className = 'w-full min-w-0' }: Props) {
   const player = useUnit($player);
-  const { waveformBarWidth, waveformBarGap, waveformBarRadius } = useUnit($appSettings);
+  const {
+    waveformHeight,
+    waveformBarWidth,
+    waveformBarGap,
+    waveformBarRadius,
+    waveformBarFullRounding,
+  } = useUnit($appSettings);
+  const barRadius = getWaveformBarRadius({
+    waveformBarWidth,
+    waveformBarRadius,
+    waveformBarFullRounding,
+  });
 
-  const outerRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WaveSurfer | null>(null);
-  const loadedTrackId = useRef<string | null>(null);
-  const defaultPxPerSecRef = useRef(0);
-  const isZoomedRef = useRef(false);
-  const resizeDebounceRef = useRef<ReturnType<typeof setTimeout>>();
-  const waveHeightRef = useRef(80);
+  const loadedSourceKeyRef = useRef<string | null>(null);
 
   // Refs so WaveSurfer event callbacks always see the latest player state
   const playerCurrentTimeRef = useRef(player.currentTime);
   const playerIsPlayingRef = useRef(player.isPlaying);
   playerCurrentTimeRef.current = player.currentTime;
   playerIsPlayingRef.current = player.isPlaying;
-
-  const [zoomMultiplier, setZoomMultiplier] = usePersistedState('reel:waveform-zoom', 1);
-  const zoomMultiplierRef = useRef(zoomMultiplier);
-  zoomMultiplierRef.current = zoomMultiplier;
-
-  const [waveHeight, setWaveHeight] = useState(80);
   const [ready, setReady] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // Fixed-pixel-width container updated only after resize settles — prevents
-  // WaveSurfer's internal ResizeObserver from re-rendering on every drag pixel.
-  useLayoutEffect(() => {
-    const outer = outerRef.current;
-    const container = containerRef.current;
-    if (!outer || !container) return;
-
-    const applySize = (w: number) => {
-      const h = calcHeight(w);
-      container.style.width = `${w}px`;
-      waveHeightRef.current = h;
-      setWaveHeight(h);
-      wsRef.current?.setOptions({ height: h });
-    };
-
-    applySize(outer.clientWidth);
-
-    const observer = new ResizeObserver(([entry]) => {
-      clearTimeout(resizeDebounceRef.current);
-      resizeDebounceRef.current = setTimeout(
-        () => applySize(Math.round(entry.contentRect.width)),
-        150,
-      );
-    });
-
-    observer.observe(outer);
-    return () => {
-      observer.disconnect();
-      clearTimeout(resizeDebounceRef.current);
-    };
-  }, []);
-
-  // Recreate WaveSurfer when bar style settings change
   useEffect(() => {
     if (!containerRef.current) return;
 
     const ws = WaveSurfer.create({
       container: containerRef.current,
-      waveColor: 'rgba(52, 211, 153, 0.28)',
-      progressColor: 'rgba(52, 211, 153, 0.88)',
-      cursorColor: 'rgba(255, 255, 255, 0.55)',
-      cursorWidth: 1,
+      waveColor: 'rgba(113, 113, 122, 0.42)',
+      progressColor: 'rgba(16, 185, 129, 0.96)',
+      cursorWidth: 0,
       barWidth: waveformBarWidth,
       barGap: waveformBarGap,
-      barRadius: waveformBarRadius,
-      height: waveHeightRef.current,
+      barRadius,
+      height: waveformHeight,
       normalize: true,
       interact: true,
       autoplay: false,
-      // Let WaveSurfer's own timer drive rendering at 60fps — this is what
-      // makes the examples smooth. It fires when ws.play() is called.
-      autoScroll: true,
-      autoCenter: true,
-      plugins: [ZoomPlugin.create({ scale: 0.5, maxZoom: 200 })],
     });
 
-    // WaveSurfer plays its own muted audio solely to keep its internal RAF
-    // timer alive. The timer calls renderProgress() once per frame (no double-
-    // render from seeked events) and drives autoScroll/autoCenter natively.
     ws.setVolume(0);
 
     ws.on('load', () => { setReady(false); setLoading(true); });
 
     ws.on('ready', () => {
-      const width = containerRef.current?.clientWidth ?? 0;
-      const duration = ws.getDuration();
-      const defaultPps = duration > 0 ? width / duration : 50;
-      defaultPxPerSecRef.current = defaultPps;
-
-      if (zoomMultiplierRef.current > 1) {
-        ws.zoom(defaultPps * zoomMultiplierRef.current);
-        isZoomedRef.current = true;
-      }
-
-      // Sync to the engine's current position before starting playback
       ws.setTime(playerCurrentTimeRef.current);
       if (playerIsPlayingRef.current) {
         ws.play().catch(() => {});
@@ -127,48 +72,40 @@ export default function WaveformSeeker() {
     });
 
     ws.on('error', () => setLoading(false));
-
-    ws.on('zoom', (pxPerSec) => {
-      const defaultPps = defaultPxPerSecRef.current;
-      isZoomedRef.current = pxPerSec > defaultPps + 1;
-      if (defaultPps > 0) {
-        setZoomMultiplier(isZoomedRef.current ? pxPerSec / defaultPps : 1);
-      }
-    });
-
-    // Seek the engine when the user clicks/drags the waveform
     ws.on('interaction', (time) => seek(time));
 
     wsRef.current = ws;
 
+    if (player.current?.track.filePath && player.streamPort) {
+      const sourceKey = `${player.current.track.id}:${player.streamPort}`;
+      loadedSourceKeyRef.current = sourceKey;
+      ws.load(getStreamUrl(player.current.track.filePath, player.streamPort)).catch(() => {});
+    }
+
     return () => {
       ws.destroy();
       wsRef.current = null;
-      loadedTrackId.current = null;
+      loadedSourceKeyRef.current = null;
       setReady(false);
       setLoading(false);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [waveformBarWidth, waveformBarGap, waveformBarRadius]);
+  }, [waveformBarWidth, waveformBarGap, barRadius, waveformHeight]);
 
-  // Load waveform data when track changes
   useEffect(() => {
     const ws = wsRef.current;
     const { current, streamPort } = player;
     if (!ws || !current || !streamPort || !current.track.filePath) return;
-    if (loadedTrackId.current === current.track.id) return;
+    const sourceKey = `${current.track.id}:${streamPort}`;
+    if (loadedSourceKeyRef.current === sourceKey) return;
 
-    loadedTrackId.current = current.track.id;
-    isZoomedRef.current = false;
+    loadedSourceKeyRef.current = sourceKey;
     ws.load(getStreamUrl(current.track.filePath, streamPort)).catch(() => {});
   }, [player.current?.track.id, player.streamPort]);
 
-  // Mirror engine play/pause → WaveSurfer (keeps its internal timer running)
   useEffect(() => {
     const ws = wsRef.current;
     if (!ws || !ready) return;
     if (player.isPlaying) {
-      // Re-sync position in case of pause → seek → resume
       ws.setTime(playerCurrentTimeRef.current);
       ws.play().catch(() => {});
     } else {
@@ -176,19 +113,61 @@ export default function WaveformSeeker() {
     }
   }, [player.isPlaying, ready]);
 
-  // Correct drift when the engine seeks (e.g. user drags the seek bar)
   useEffect(() => {
     const ws = wsRef.current;
     if (!ws || !ready) return;
-    if (Math.abs(ws.getCurrentTime() - player.currentTime) > 0.5) {
+    if (Math.abs(ws.getCurrentTime() - player.currentTime) > 0.35) {
       ws.setTime(player.currentTime);
     }
   }, [player.currentTime, ready]);
 
+  const seekToTime = (nextTime: number) => {
+    const duration = player.duration || 0;
+    seek(Math.max(0, Math.min(nextTime, duration)));
+  };
+
+  const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const step = Math.max(1, Math.min(10, Math.floor((player.duration || 0) / 50) || 5));
+
+    switch (event.key) {
+      case 'ArrowLeft':
+      case 'ArrowDown':
+        event.preventDefault();
+        seekToTime(player.currentTime - step);
+        break;
+      case 'ArrowRight':
+      case 'ArrowUp':
+        event.preventDefault();
+        seekToTime(player.currentTime + step);
+        break;
+      case 'Home':
+        event.preventDefault();
+        seekToTime(0);
+        break;
+      case 'End':
+        event.preventDefault();
+        seekToTime(player.duration || 0);
+        break;
+      default:
+        break;
+    }
+  };
+
   return (
-    <div ref={outerRef} className="w-full relative overflow-hidden">
+    <div
+      className={`${className} relative overflow-hidden rounded-sm focus:outline-none focus-visible:ring-1 focus-visible:ring-emerald-500/70`}
+      style={{ height: waveformHeight }}
+      tabIndex={0}
+      role="slider"
+      aria-label="Seek"
+      aria-valuemin={0}
+      aria-valuemax={player.duration || 0}
+      aria-valuenow={Math.min(player.currentTime, player.duration || 0)}
+      aria-valuetext={`${formatTime(player.currentTime)} of ${formatTime(player.duration)}`}
+      onKeyDown={handleKeyDown}
+    >
       {loading && (
-        <div className="flex items-end gap-[2px] overflow-hidden" style={{ height: waveHeight }}>
+        <div className="absolute inset-0 flex items-end gap-px overflow-hidden">
           {SKELETON_HEIGHTS.map((h, i) => (
             <div
               key={i}
@@ -200,8 +179,15 @@ export default function WaveformSeeker() {
       )}
       <div
         ref={containerRef}
-        className={`transition-opacity duration-300 ${ready ? 'opacity-100' : 'opacity-0 absolute inset-0'}`}
+        className={`h-full w-full transition-opacity duration-200 ${ready ? 'opacity-100' : 'opacity-0 absolute inset-0'}`}
       />
     </div>
   );
+}
+
+function formatTime(seconds: number): string {
+  if (!isFinite(seconds) || seconds < 0) return '0:00';
+  const minutes = Math.floor(seconds / 60);
+  const remainder = Math.floor(seconds % 60);
+  return `${minutes}:${remainder.toString().padStart(2, '0')}`;
 }

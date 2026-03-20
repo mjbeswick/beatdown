@@ -18,7 +18,7 @@ import {
   type DownloadProgress,
 } from './downloader';
 import { logger } from '../logger';
-import { savePlaylist, deletePlaylist, loadAllPlaylists } from './playlist';
+import { savePlaylist, deletePlaylist, loadAllPlaylists, calculateSizeOnDiskBytes } from './playlist';
 
 const CONCURRENCY = 3;
 const MAX_RETRIES = 2;
@@ -27,6 +27,15 @@ const RETRY_DELAYS_MS = [2000, 8000];
 function hasTrackFileForFormat(track: TrackInfo, format: AudioFormat): boolean {
   if (!track.filePath || !fs.existsSync(track.filePath)) return false;
   return track.filePath.toLowerCase().endsWith(getExpectedAudioExtension(format));
+}
+
+function getFileSizeBytes(filePath: string): number | undefined {
+  try {
+    const stats = fs.statSync(filePath);
+    return stats.isFile() ? stats.size : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export class DownloadQueue extends EventEmitter {
@@ -120,6 +129,7 @@ export class DownloadQueue extends EventEmitter {
       totalTracks: tracks.length,
       completedTracks: 0,
       failedTracks: 0,
+      sizeOnDiskBytes: 0,
       addedAt: new Date().toISOString(),
       format,
       quality,
@@ -245,8 +255,10 @@ export class DownloadQueue extends EventEmitter {
       const hasMatchingFile = hasTrackFileForFormat(track, item.format);
 
       if (hasMatchingFile) {
+        const fileSizeBytes = track.filePath ? getFileSizeBytes(track.filePath) : undefined;
         track.status = 'done';
         track.progress = 100;
+        track.fileSizeBytes = fileSizeBytes;
         track.speed = undefined;
         track.eta = undefined;
         track.error = undefined;
@@ -259,6 +271,7 @@ export class DownloadQueue extends EventEmitter {
       track.eta = undefined;
       track.error = undefined;
       track.filePath = undefined;
+      track.fileSizeBytes = undefined;
       queuedTracks++;
     }
 
@@ -270,6 +283,7 @@ export class DownloadQueue extends EventEmitter {
       item.totalTracks > 0
         ? Math.round((item.completedTracks / item.totalTracks) * 100)
         : 0;
+    item.sizeOnDiskBytes = calculateSizeOnDiskBytes(item.tracks);
     item.speed = undefined;
     item.status = queuedTracks > 0 ? 'queued' : 'done';
     item.completedAt = queuedTracks > 0 ? undefined : item.completedAt;
@@ -334,6 +348,7 @@ export class DownloadQueue extends EventEmitter {
 
     item.completedTracks = done;
     item.failedTracks = failed;
+    item.sizeOnDiskBytes = calculateSizeOnDiskBytes(item.tracks);
     item.progress =
       totalTracks > 0
         ? Math.min(Math.round(((finished * 100 + activeProgress) / totalTracks)), 100)
@@ -393,6 +408,7 @@ export class DownloadQueue extends EventEmitter {
         status: 'done',
         progress: 100,
         filePath: existing,
+        fileSizeBytes: getFileSizeBytes(existing),
         speed: undefined,
         eta: undefined,
       });
@@ -436,6 +452,7 @@ export class DownloadQueue extends EventEmitter {
         status: 'done',
         progress: 100,
         filePath,
+        fileSizeBytes: getFileSizeBytes(filePath),
         speed: undefined,
         eta: undefined,
       });

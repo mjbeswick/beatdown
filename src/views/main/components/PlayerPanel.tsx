@@ -29,9 +29,14 @@ import {
 import { $cast, devicesDiscovered, discoveringStarted, deviceSelected } from '../stores/cast';
 import { navToAlbum, navToArtist } from '../stores/nav';
 import { $favourites, toggleFavourite } from '../stores/favourites';
+import { $appSettings } from '../stores/appSettings';
 import { rpc } from '../rpc';
+import WaveformSeeker from './WaveformSeeker';
 // Ensure audio engine is initialized
 import '../audio/engine';
+
+const BASE_PLAYER_PANEL_HEIGHT = 64;
+const DEFAULT_WAVEFORM_HEIGHT = 18;
 
 interface Props {
   onLyricsToggle: () => void;
@@ -42,6 +47,7 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
   const player = useUnit($player);
   const cast = useUnit($cast);
   const favourites = useUnit($favourites);
+  const appSettings = useUnit($appSettings);
   const [castOpen, setCastOpen] = useState(false);
   const castRef = useRef<HTMLDivElement>(null);
 
@@ -101,9 +107,17 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
   const elapsed = formatTime(player.currentTime);
   const total = formatTime(player.duration);
   const progressPct = player.duration > 0 ? (player.currentTime / player.duration) * 100 : 0;
+  const waveformHeightOffset =
+    appSettings.playerSeekerStyle === 'waveform'
+      ? Math.max(0, appSettings.waveformHeight - DEFAULT_WAVEFORM_HEIGHT)
+      : 0;
+  const playerPanelHeight = BASE_PLAYER_PANEL_HEIGHT + waveformHeightOffset;
 
   return (
-    <div className="shrink-0 h-16 bg-zinc-800/70 border-t border-zinc-700/60 flex items-center gap-4 px-4 z-10">
+    <div
+      className="shrink-0 bg-zinc-800/70 border-t border-zinc-700/60 flex items-center gap-4 px-4 z-10"
+      style={{ height: playerPanelHeight }}
+    >
       {/* Track info */}
       <div className="flex items-center gap-2.5 w-52 shrink-0 min-w-0">
         <button
@@ -150,8 +164,8 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
       </div>
 
       {/* Controls + seeker */}
-      <div className="flex-1 flex flex-col items-center gap-0.5">
-        <div className="flex items-center gap-3">
+      <div className="flex-1 flex flex-col items-center gap-2">
+        <div className="flex items-center gap-4">
           <button
             onClick={() => toggleShuffle()}
             className={`transition-colors ${
@@ -202,22 +216,26 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
         </div>
 
         {/* Seeker */}
-        <div className="flex items-center gap-2 w-full max-w-md">
+        <div className="flex items-center gap-3 w-full max-w-md">
           <span className="text-zinc-600 text-[10px] tabular-nums font-mono w-8 text-right shrink-0">
             {elapsed}
           </span>
-          <div className="relative flex-1 h-3 flex items-center group">
-            <input
-              type="range"
-              min={0}
-              max={player.duration || 0}
-              step={0.1}
-              value={player.currentTime}
-              onChange={(e) => seek(parseFloat(e.target.value))}
-              className="w-full h-1 appearance-none rounded-full cursor-pointer seeker"
-              style={{ '--progress': `${progressPct}%` } as React.CSSProperties}
-            />
-          </div>
+          {appSettings.playerSeekerStyle === 'waveform' ? (
+            <WaveformSeeker className="flex-1 min-w-0" />
+          ) : (
+            <div className="relative flex-1 h-3 flex items-center group">
+              <input
+                type="range"
+                min={0}
+                max={player.duration || 0}
+                step={0.1}
+                value={player.currentTime}
+                onChange={(e) => seek(parseFloat(e.target.value))}
+                className="w-full h-1 appearance-none rounded-full cursor-pointer seeker"
+                style={{ '--progress': `${progressPct}%` } as React.CSSProperties}
+              />
+            </div>
+          )}
           <span className="text-zinc-600 text-[10px] tabular-nums font-mono w-8 shrink-0">
             {total}
           </span>

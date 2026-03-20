@@ -29,6 +29,7 @@ import {
   loadVisualizerPresetCatalog,
 } from '../lib/visualizer';
 import WaveformSettingsCard from './WaveformSettingsCard';
+import DjSettingsCard from './DjSettingsCard';
 
 const FORMATS: { value: AudioFormat; label: string }[] = [
   { value: 'mp3', label: 'MP3' },
@@ -165,6 +166,8 @@ export default function SettingsView() {
         </div>
 
         <WaveformSettingsCard />
+
+        <DjSettingsCard />
 
         {/* Downloads */}
         <div className="bg-zinc-800/50 border border-zinc-700/60 rounded-xl overflow-hidden">

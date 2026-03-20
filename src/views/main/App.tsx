@@ -19,6 +19,7 @@ import { loadAllFx } from './stores/downloads';
 import { $player, togglePlay, next, prev, seek, setVolume } from './stores/player';
 import { $theme } from './stores/theme';
 import './audio/engine'; // initialize audio engine
+import './audio/djEngine'; // initialize DJ crossfade/beatmatch engine
 
 export default function App() {
   const nav = useUnit($nav);

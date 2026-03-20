@@ -12,6 +12,19 @@ import TrackRow from './TrackRow';
 
 const ACTIVE_DOWNLOAD_STATUSES: DownloadStatus[] = ['queued', 'active', 'fetching'];
 
+function formatBytes(bytes: number): string {
+  if (bytes >= 1024 ** 3) {
+    return `${(bytes / 1024 ** 3).toFixed(bytes >= 10 * 1024 ** 3 ? 0 : 1)} GB`;
+  }
+  if (bytes >= 1024 ** 2) {
+    return `${(bytes / 1024 ** 2).toFixed(bytes >= 100 * 1024 ** 2 ? 0 : 1)} MB`;
+  }
+  if (bytes >= 1024) {
+    return `${Math.round(bytes / 1024)} KB`;
+  }
+  return `${bytes} B`;
+}
+
 function getSpotifyPlaylistWebUrl(url: string): string | null {
   const trimmed = url.trim();
   if (!trimmed) return null;
@@ -90,13 +103,14 @@ function PlaylistListItem({ item, isSelected, onSelect }: PlaylistListItemProps)
   const { pos, open, close } = useContextMenu();
   const playableTracks = getPlayableTracks(item);
   const showStatus = item.status !== 'done' && item.status !== 'error';
+  const sizeLabel = item.sizeOnDiskBytes > 0 ? formatBytes(item.sizeOnDiskBytes) : null;
 
   const menuItems: ContextMenuEntry[] = [];
 
   if (playableTracks.length > 0) {
     menuItems.push(
       { label: 'Play All', icon: <Play size={13} className="fill-current" />, onClick: () => playDownloadPlaylist(item) },
-      { label: 'Enqueue All', onClick: () => enqueueDownloadedPlaylist(item) },
+      { label: 'Enqueue All', icon: <ListMusic size={13} />, onClick: () => enqueueDownloadedPlaylist(item) },
       { separator: true }
     );
   }
@@ -155,7 +169,10 @@ function PlaylistListItem({ item, isSelected, onSelect }: PlaylistListItemProps)
         <div className="flex-1 min-w-0">
           <div className="text-zinc-300 text-xs truncate">{item.name}</div>
           <div className="flex items-center gap-2 text-xs min-w-0">
-            <span className="text-zinc-600 truncate">{playableTracks.length}/{item.totalTracks} tracks</span>
+            <span className="text-zinc-600 truncate">
+              {playableTracks.length}/{item.totalTracks} tracks
+              {sizeLabel ? ` · ${sizeLabel}` : ''}
+            </span>
             {showStatus ? (
               <span className="ml-auto shrink-0">
                 <PlaylistListStatus status={item.status} />
@@ -205,6 +222,7 @@ export default function PlaylistsView() {
   const isActiveDownload = selected ? ACTIVE_DOWNLOAD_STATUSES.includes(selected.status) : false;
   const isPaused = selected?.status === 'paused';
   const spotifyPlaylistUrl = selected ? getSpotifyPlaylistWebUrl(selected.url) : null;
+  const selectedSizeLabel = selected && selected.sizeOnDiskBytes > 0 ? formatBytes(selected.sizeOnDiskBytes) : null;
 
   const openSelectedPlaylistInSpotify = () => {
     if (!spotifyPlaylistUrl) return;
@@ -254,6 +272,7 @@ export default function PlaylistsView() {
                 <div className="mt-0.5 flex items-center gap-3 text-xs min-w-0">
                   <span className="text-zinc-500">
                     {doneTracks.length} / {selected.totalTracks} tracks
+                    {selectedSizeLabel ? ` · ${selectedSizeLabel} on disk` : ''}
                   </span>
                   {spotifyPlaylistUrl && (
                     <button

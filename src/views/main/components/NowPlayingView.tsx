@@ -25,10 +25,8 @@ import { rpc } from '../rpc';
 import type { LyricLine } from '../../../shared/types';
 import ContextMenu, { type ContextMenuEntry } from './ContextMenu';
 import ResizablePaneLayout from './ResizablePaneLayout';
-import WaveformSeeker from './WaveformSeeker';
 import { useContextMenu } from '../hooks/useContextMenu';
 import { usePersistedState } from '../hooks/usePersistedState';
-import WaveformSettingsCard from './WaveformSettingsCard';
 
 type Tab = 'queue' | 'lyrics';
 
@@ -38,7 +36,6 @@ export default function NowPlayingView() {
   const search = useUnit($search);
   const { pos: albumArtMenuPos, open: openAlbumArtMenu, close: closeAlbumArtMenu } = useContextMenu();
   const [tab, setTab] = useState<Tab>('queue');
-  const [showWaveform, setShowWaveform] = usePersistedState('reel:now-playing-waveform-visible', true);
   const [showSidebar, setShowSidebar] = usePersistedState('reel:now-playing-sidebar-visible', true);
   const [showConfig, setShowConfig] = useState(false);
   const [lyrics, setLyrics] = useState<LyricLine[] | null>(null);
@@ -423,21 +420,8 @@ export default function NowPlayingView() {
             >
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-zinc-500">Now Playing</p>
-                <p className="mt-1 text-sm text-zinc-300">Quick controls for the waveform and right sidebar.</p>
+                <p className="mt-1 text-sm text-zinc-300">Quick controls for the right sidebar.</p>
               </div>
-
-              <label className="flex items-center justify-between gap-4 rounded-xl border border-zinc-100/10 bg-zinc-100/[0.03] px-3 py-2.5">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-zinc-100">Show waveform</p>
-                  <p className="mt-0.5 text-xs text-zinc-500">Show or hide the waveform seeker below the track details.</p>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={showWaveform}
-                  onChange={(e) => setShowWaveform(e.target.checked)}
-                  className="h-4 w-4 shrink-0 accent-emerald-500"
-                />
-              </label>
 
               <label className="flex items-center justify-between gap-4 rounded-xl border border-zinc-100/10 bg-zinc-100/[0.03] px-3 py-2.5">
                 <div className="min-w-0">
@@ -451,8 +435,6 @@ export default function NowPlayingView() {
                   className="h-4 w-4 shrink-0 accent-emerald-500"
                 />
               </label>
-
-              <WaveformSettingsCard className="rounded-xl overflow-hidden border border-zinc-100/10 bg-zinc-100/[0.03]" />
             </div>
           )}
         </div>
@@ -551,8 +533,6 @@ export default function NowPlayingView() {
           {current.albumName}
         </button>
       </div>
-
-      {showWaveform && <WaveformSeeker />}
     </div>
   );
 

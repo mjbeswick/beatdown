@@ -18,6 +18,7 @@ export interface TrackInfo {
   eta?: number;
   error?: string;
   filePath?: string;
+  fileSizeBytes?: number;
 }
 
 export interface DownloadItem {
@@ -35,6 +36,7 @@ export interface DownloadItem {
   failedTracks: number;
   speed?: number;
   eta?: number;
+  sizeOnDiskBytes: number;
   addedAt: string;
   completedAt?: string;
   format: AudioFormat;

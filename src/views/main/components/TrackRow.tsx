@@ -1,4 +1,4 @@
-import { CheckCircle2, AlertCircle, Loader2, Clock, Trash2, Play } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Loader2, Clock, Trash2, Play, ListMusic } from 'lucide-react';
 import type { TrackInfo } from '../../../shared/types';
 import { fmtSpeed, fmtEta } from './DownloadRow';
 import { useContextMenu } from '../hooks/useContextMenu';
@@ -37,6 +37,8 @@ interface Props {
 export default function TrackRow({ track, downloadId, coverArt, albumName = '', allTracks, compact }: Props) {
   const isActive = track.status === 'downloading' || track.status === 'converting';
   const isDone = track.status === 'done';
+  const showSpeed = track.status === 'downloading' && !!track.speed && track.speed > 0;
+  const showEta = track.status === 'downloading' && !!track.eta;
   const { pos, open, close } = useContextMenu();
   const player = useUnit($player);
   const isNowPlaying = player.current?.track.id === track.id;
@@ -54,7 +56,16 @@ export default function TrackRow({ track, downloadId, coverArt, albumName = '', 
       const doneTracks = allTracks.filter((t) => t.track.status === 'done');
       const idx = doneTracks.findIndex((t) => t.track.id === track.id);
       if (idx !== -1) {
-        playPlaylist({ tracks: doneTracks.map((t) => ({ track: t.track, downloadId: t.downloadId, coverArt: t.coverArt, albumName: t.albumName })), startIndex: idx });
+        playPlaylist({
+          tracks: doneTracks.map((t) => ({
+            track: t.track,
+            downloadId: t.downloadId,
+            coverArt: t.coverArt,
+            albumName: t.albumName,
+          })),
+          startIndex: idx,
+          pinStartTrack: true,
+        });
         return;
       }
     }
@@ -83,39 +94,39 @@ export default function TrackRow({ track, downloadId, coverArt, albumName = '', 
       )}
 
       {/* Title + artist */}
-      <div className="flex-1 min-w-0 pr-3">
-        <span className={`text-xs truncate ${isNowPlaying ? 'text-emerald-400' : 'text-zinc-300'}`}>
-          {track.title}
-        </span>
-        <span className="text-zinc-600 text-xs"> — {track.artist}</span>
+      <div className="flex-1 min-w-0">
+        <div className="truncate text-xs leading-tight">
+          <span className={isNowPlaying ? 'text-emerald-400' : 'text-zinc-300'}>{track.title}</span>
+          <span className="text-zinc-600"> — {track.artist}</span>
+        </div>
       </div>
 
-      {/* Progress bar */}
-      <div className="w-44 shrink-0 pr-2">
-        {isActive && (
-          <>
+      {isActive && (
+        <div className="ml-auto flex shrink-0 items-center justify-end gap-3 pl-3">
+          {/* Progress bar */}
+          <div className="w-40 shrink-0 text-right">
             <div className="text-xs text-zinc-600 font-mono tabular-nums mb-0.5">{track.progress}%</div>
-            <div className="h-1 bg-zinc-700 rounded-full overflow-hidden">
+            <div className="ml-auto h-1 bg-zinc-700 rounded-full overflow-hidden">
               <div
                 className="h-full bg-emerald-500 rounded-full transition-all duration-300"
                 style={{ width: `${track.progress}%` }}
               />
             </div>
-          </>
-        )}
-      </div>
+          </div>
 
-      {/* Speed */}
-      <div className="w-24 shrink-0 text-right font-mono text-xs text-zinc-600 tabular-nums">
-        {track.status === 'downloading' && track.speed && track.speed > 0 ? fmtSpeed(track.speed) : ''}
-      </div>
+          {showSpeed && (
+            <div className="w-24 shrink-0 text-right font-mono text-xs text-zinc-600 tabular-nums">
+              {fmtSpeed(track.speed!)}
+            </div>
+          )}
 
-      {/* ETA */}
-      <div className="w-16 shrink-0 text-right font-mono text-xs text-zinc-600 tabular-nums">
-        {track.status === 'downloading' && track.eta ? fmtEta(track.eta) : ''}
-      </div>
-
-      <div className="w-7 shrink-0" />
+          {showEta && (
+            <div className="w-16 shrink-0 text-right font-mono text-xs text-zinc-600 tabular-nums">
+              {fmtEta(track.eta!)}
+            </div>
+          )}
+        </div>
+      )}
 
       {pos && downloadId && (
         <ContextMenu
@@ -126,7 +137,7 @@ export default function TrackRow({ track, downloadId, coverArt, albumName = '', 
             ...(isDone ? [
               { label: 'Play', icon: <Play size={13} />, onClick: () => playTrack(asPlayingTrack()) },
               { label: 'Play Next', icon: <Play size={13} />, onClick: () => playNext(asPlayingTrack()) },
-              { label: 'Enqueue', onClick: () => enqueueTrack(asPlayingTrack()) },
+              { label: 'Enqueue', icon: <ListMusic size={13} />, onClick: () => enqueueTrack(asPlayingTrack()) },
               { separator: true as const },
               { label: 'Go to Artist', onClick: () => navToArtist(track.artist) },
               { separator: true as const },
