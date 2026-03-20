@@ -1,11 +1,12 @@
 import Electrobun, { BrowserWindow, defineElectrobunRPC, Utils, ApplicationMenu } from 'electrobun/bun';
 import type { DownloadItem, LyricLine } from '../shared/types';
 import type { AddDownloadParams } from '../shared/types';
-import type { ReelRPCSchema } from '../shared/rpc-schema';
+import type { BeatdownRPCSchema } from '../shared/rpc-schema';
 import { queue } from './services/queue';
 import { getSpotifyContent } from './services/spotify';
 import { getLyrics } from './services/lyrics';
 import { paths } from './services/paths';
+import { appConfig } from './services/appConfig';
 import { logger } from './logger';
 import {
   getCustomVisualizerPreset,
@@ -200,7 +201,7 @@ logger.info(`Stream server listening on port ${streamPort}`);
 
 // ── RPC instance ──────────────────────────────────────────────────────────────
 
-const rpc = defineElectrobunRPC<ReelRPCSchema, 'bun'>('bun', {
+const rpc = defineElectrobunRPC<BeatdownRPCSchema, 'bun'>('bun', {
   handlers: {
     requests: {
       'download:preview': async ({ url }) => {
@@ -326,6 +327,14 @@ const rpc = defineElectrobunRPC<ReelRPCSchema, 'bun'>('bun', {
         await seekCast(device, seconds);
       },
 
+      'settings:load': () => {
+        return appConfig.load();
+      },
+
+      'settings:save': ({ key, value }) => {
+        appConfig.save(key, value);
+      },
+
       'paths:browse': async ({ type }) => {
         const current =
           type === 'library'
@@ -388,7 +397,7 @@ queue.on('download:removed', (id: string) => {
 // ── Load existing downloads ────────────────────────────────────────────────────
 
 queue.loadFromDisk();
-logger.info('Reel starting up...');
+logger.info('Beatdown starting up...');
 
 // ── Close confirmation state ──────────────────────────────────────────────────
 
@@ -396,7 +405,7 @@ let isForceQuitting = false;
 
 // ── Window state persistence ──────────────────────────────────────────────────
 
-const WINDOW_STATE_PATH = path.join(os.homedir(), 'Music', 'Reel', 'window-state.json');
+const WINDOW_STATE_PATH = path.join(appConfig.getDir(), 'window-state.json');
 const DEFAULT_FRAME = { x: 100, y: 100, width: 1200, height: 800 };
 
 function loadWindowState(): typeof DEFAULT_FRAME {
@@ -427,7 +436,7 @@ let lastWindowFrame = loadWindowState();
 
 function createMainWindow() {
   const newWin = new BrowserWindow({
-    title: 'Reel',
+    title: 'Beatdown',
     frame: { ...lastWindowFrame },
     url: 'views://main/index.html',
     rpc,
@@ -452,7 +461,7 @@ const win = createMainWindow();
 // ── Application menu (required for macOS edit shortcuts: Cmd+C/V/X/Z etc.) ───
 ApplicationMenu.setApplicationMenu([
   {
-    label: 'Reel',
+    label: 'Beatdown',
     submenu: [
       { role: 'about' },
       { type: 'separator' },

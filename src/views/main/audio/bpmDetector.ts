@@ -20,7 +20,7 @@ export interface DetectedBeat {
   firstBeatOffset: number;
 }
 
-const CACHE_PREFIX = 'reel:bpm:';
+const CACHE_PREFIX = 'beatdown:bpm:';
 const SAMPLE_RATE = 22_050;
 const WIN_SAMPLES = Math.round(SAMPLE_RATE * 0.01); // 10 ms window
 

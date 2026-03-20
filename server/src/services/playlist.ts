@@ -11,7 +11,7 @@ import {
 } from '../types';
 import { logger } from '../logger';
 
-export const OUTPUT_BASE = path.join(os.homedir(), 'Music', 'Reel');
+export const OUTPUT_BASE = path.join(os.homedir(), 'Music', 'Beatdown');
 
 function sanitize(name: string): string {
   return name.replace(/[<>:"/\\|?*\x00-\x1f]/g, '').trim() || 'Unknown';

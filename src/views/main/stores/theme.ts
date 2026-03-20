@@ -1,22 +1,21 @@
 import { createStore, createEvent } from 'effector';
+import { rpc } from '../rpc';
+import { loadSettingsFx } from './settingsLoader';
 
 export type ThemeOption = 'system' | 'light' | 'dark';
 
-const STORAGE_KEY = 'reel:theme';
-
-function readTheme(): ThemeOption {
-  try {
-    const v = localStorage.getItem(STORAGE_KEY);
-    if (v === 'light' || v === 'dark' || v === 'system') return v;
-  } catch {}
-  return 'system';
+function isThemeOption(v: unknown): v is ThemeOption {
+  return v === 'system' || v === 'light' || v === 'dark';
 }
 
 export const themeChanged = createEvent<ThemeOption>();
 
-export const $theme = createStore<ThemeOption>(readTheme()).on(themeChanged, (_, t) => t);
+export const $theme = createStore<ThemeOption>('system')
+  .on(themeChanged, (_, t) => t)
+  .on(loadSettingsFx.doneData, (state, data) =>
+    isThemeOption(data.theme) ? data.theme : state
+  );
 
-// Persist to localStorage on every change.
 $theme.watch((t) => {
-  try { localStorage.setItem(STORAGE_KEY, t); } catch {}
+  rpc.proxy.request['settings:save']({ key: 'theme', value: t }).catch(() => {});
 });

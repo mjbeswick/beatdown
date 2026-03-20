@@ -1,4 +1,6 @@
 import { createEvent, createStore } from 'effector';
+import { rpc } from '../rpc';
+import { loadSettingsFx } from './settingsLoader';
 
 export type PlayerSeekerStyle = 'bar' | 'waveform';
 export type DjMode = 'off' | 'crossfade' | 'beatmatch';
@@ -19,8 +21,6 @@ export interface AppSettings {
   djMode: DjMode;
   crossfadeDuration: number; // seconds, 2–16
 }
-
-const STORAGE_KEY = 'reel:app-settings';
 
 const DEFAULT_SETTINGS: AppSettings = {
   confirmTrackDeletion: true,
@@ -97,19 +97,11 @@ function sanitizeSettings(input: Partial<AppSettings> | null | undefined): AppSe
 }
 
 function loadSettings(): AppSettings {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (!stored) return DEFAULT_SETTINGS;
-    return sanitizeSettings(JSON.parse(stored) as Partial<AppSettings>);
-  } catch {
-    return DEFAULT_SETTINGS;
-  }
+  return DEFAULT_SETTINGS;
 }
 
 function saveSettings(settings: AppSettings): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
-  } catch {}
+  rpc.proxy.request['settings:save']({ key: 'appSettings', value: settings }).catch(() => {});
 }
 
 function applyPatch(state: AppSettings, patch: Partial<AppSettings>): AppSettings {
@@ -122,6 +114,9 @@ export const patchAppSettings = createEvent<Partial<AppSettings>>();
 export const setConfirmTrackDeletion = createEvent<boolean>();
 
 export const $appSettings = createStore<AppSettings>(loadSettings())
+  .on(loadSettingsFx.doneData, (state, data) =>
+    data.appSettings ? sanitizeSettings(data.appSettings as Partial<AppSettings>) : state
+  )
   .on(patchAppSettings, (state, patch) => applyPatch(state, patch))
   .on(setConfirmTrackDeletion, (state, confirmTrackDeletion) =>
     applyPatch(state, { confirmTrackDeletion })

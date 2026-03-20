@@ -1,5 +1,5 @@
 {
-  "name": "reel",
+  "name": "beatdown",
   "version": "1.0.0",
   "private": true,
   "scripts": {
@@ -24,6 +24,7 @@
     "effector": "^23.0.0",
     "effector-react": "^23.0.0",
     "electrobun": "^1.16.0",
+    "env-paths": "^4.0.0",
     "lucide-react": "^0.344.0",
     "milkdrop-preset-converter": "^0.1.2",
     "postcss": "^8.5.8",

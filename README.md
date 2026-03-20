@@ -1,4 +1,4 @@
-# Reel
+# Beatdown
 
 A local Spotify playlist downloader with a Transmission-inspired UI.
 
@@ -27,4 +27,4 @@ npm run dev
 
 ## Downloads
 
-Files are saved to `~/Music/Reel/<playlist-name>/`
+Files are saved to `~/Music/Beatdown/<playlist-name>/`

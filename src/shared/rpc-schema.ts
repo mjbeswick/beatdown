@@ -1,10 +1,21 @@
 import type { DownloadItem, LyricLine, AddDownloadParams, SpotifyContent, DLNADevice } from './types';
 export type { DLNADevice };
 
-export interface ReelPaths {
+export interface BeatdownPaths {
   libraryDir: string;
   playlistsDir: string;
   visualizerPresetsDir: string;
+}
+
+export type SettingsKey = 'appSettings' | 'theme' | 'visualizer' | 'favourites' | 'playerPrefs' | 'playerSession';
+
+export interface RawSettings {
+  appSettings: Record<string, unknown> | null;
+  theme: string | null;
+  visualizer: Record<string, unknown> | null;
+  favourites: unknown[] | null;
+  playerPrefs: Record<string, unknown> | null;
+  playerSession: Record<string, unknown> | null;
 }
 
 export interface VisualizerPresetDescriptor {
@@ -21,7 +32,7 @@ export interface VisualizerPresetCatalog {
  * Shared RPC schema used by both bun and webview sides.
  * Satisfies the ElectrobunRPCSchema shape structurally.
  */
-export interface ReelRPCSchema {
+export interface BeatdownRPCSchema {
   bun: {
     requests: {
       'download:add': { params: AddDownloadParams; response: DownloadItem };
@@ -41,13 +52,13 @@ export interface ReelRPCSchema {
       'app:openExternal': { params: { url: string }; response: boolean };
       'app:forceQuit': { params: undefined; response: void };
       'app:cancelClose': { params: undefined; response: void };
-      'paths:get': { params: undefined; response: ReelPaths };
+      'paths:get': { params: undefined; response: BeatdownPaths };
       'paths:browse': {
         params: { type: 'library' | 'playlists' | 'visualizerPresets' };
-        response: ReelPaths | null;
+        response: BeatdownPaths | null;
       };
       'visualizer-presets:list': { params: undefined; response: VisualizerPresetCatalog };
-      'visualizer-presets:clear-folder': { params: undefined; response: ReelPaths };
+      'visualizer-presets:clear-folder': { params: undefined; response: BeatdownPaths };
       'visualizer-presets:get': {
         params: { id: string };
         response: Record<string, unknown> | null;
@@ -58,6 +69,8 @@ export interface ReelRPCSchema {
       'cast:pause': { params: { deviceId: string }; response: void };
       'cast:resume': { params: { deviceId: string }; response: void };
       'cast:seek': { params: { deviceId: string; seconds: number }; response: void };
+      'settings:load': { params: undefined; response: RawSettings };
+      'settings:save': { params: { key: SettingsKey; value: unknown }; response: void };
     };
     messages: {
       'downloads:state': DownloadItem[];
@@ -78,13 +91,13 @@ export interface ReelRPCSchema {
 }
 
 /** LocalSchema for the webview side (receives bun messages, handles no requests) */
-export type ReelViewLocalSchema = {
-  requests: ReelRPCSchema['webview']['requests'];
-  messages: ReelRPCSchema['bun']['messages'];
+export type BeatdownViewLocalSchema = {
+  requests: BeatdownRPCSchema['webview']['requests'];
+  messages: BeatdownRPCSchema['bun']['messages'];
 };
 
 /** RemoteSchema for the webview side (calls bun requests, sends no messages) */
-export type ReelViewRemoteSchema = {
-  requests: ReelRPCSchema['bun']['requests'];
-  messages: ReelRPCSchema['webview']['messages'];
+export type BeatdownViewRemoteSchema = {
+  requests: BeatdownRPCSchema['bun']['requests'];
+  messages: BeatdownRPCSchema['webview']['messages'];
 };

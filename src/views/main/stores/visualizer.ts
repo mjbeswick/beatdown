@@ -1,4 +1,6 @@
 import { createEvent, createStore } from 'effector';
+import { rpc } from '../rpc';
+import { loadSettingsFx } from './settingsLoader';
 
 export type VisualizerQualityPreset = 'performance' | 'balanced' | 'detail' | 'ultra';
 export type VisualizerMeshDensity = 'sparse' | 'standard' | 'dense' | 'extreme';
@@ -23,7 +25,6 @@ export interface VisualizerSettings {
   changePresetOnTrackChange: boolean;
 }
 
-const STORAGE_KEY = 'reel:visualizer';
 const QUALITY_PRESETS: VisualizerQualityPreset[] = ['performance', 'balanced', 'detail', 'ultra'];
 const MESH_DENSITIES: VisualizerMeshDensity[] = ['sparse', 'standard', 'dense', 'extreme'];
 const CYCLE_ORDERS: VisualizerCycleOrder[] = ['random', 'sequential'];
@@ -117,19 +118,11 @@ function sanitizeSettings(input: Partial<VisualizerSettings> | null | undefined)
 }
 
 function loadSettings(): VisualizerSettings {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (!stored) return DEFAULT_SETTINGS;
-    return sanitizeSettings(JSON.parse(stored) as Partial<VisualizerSettings>);
-  } catch {
-    return DEFAULT_SETTINGS;
-  }
+  return DEFAULT_SETTINGS;
 }
 
 function saveSettings(settings: VisualizerSettings): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
-  } catch {}
+  rpc.proxy.request['settings:save']({ key: 'visualizer', value: settings }).catch(() => {});
 }
 
 function applyPatch(
@@ -163,6 +156,9 @@ export const setVisualizerTrackChangeOverlaySeconds = createEvent<number>();
 export const setVisualizerChangePresetOnTrackChange = createEvent<boolean>();
 
 export const $visualizerSettings = createStore<VisualizerSettings>(loadSettings())
+  .on(loadSettingsFx.doneData, (state, data) =>
+    data.visualizer ? sanitizeSettings(data.visualizer as Partial<VisualizerSettings>) : state
+  )
   .on(patchVisualizerSettings, (state, patch) => applyPatch(state, patch))
   .on(setVisualizerPresetName, (state, presetName) => applyPatch(state, { presetName }))
   .on(setVisualizerAutoCycle, (state, autoCycle) => applyPatch(state, { autoCycle }))

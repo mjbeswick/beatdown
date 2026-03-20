@@ -16,6 +16,7 @@ import StatusBar from './components/StatusBar';
 import ErrorModal from './components/ErrorModal';
 import DownloadPreviewModal from './components/DownloadPreviewModal';import CloseConfirmModal from './components/CloseConfirmModal';import { $nav } from './stores/nav';
 import { loadAllFx } from './stores/downloads';
+import { loadSettingsFx } from './stores/settingsLoader';
 import { $player, togglePlay, next, prev, seek, setVolume } from './stores/player';
 import { $theme } from './stores/theme';
 import './audio/engine'; // initialize audio engine
@@ -45,6 +46,7 @@ export default function App() {
 
   // Load all downloads on startup
   useEffect(() => {
+    loadSettingsFx();
     loadAllFx();
   }, []);
 

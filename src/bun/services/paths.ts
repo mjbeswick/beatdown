@@ -1,57 +1,59 @@
 /**
  * Manages user-configurable library and playlists directories.
- * Defaults to ~/Music/Reel/{Library,Playlists} but can be overridden
- * and persisted to ~/Music/Reel/paths.json.
+ * Defaults to ~/Music/Beatdown/{Library,Playlists} but can be overridden.
+ * Config (paths.json) is persisted to the OS config dir alongside other app settings.
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import envPaths from 'env-paths';
 
-const DEFAULT_BASE = path.join(os.homedir(), 'Music', 'Reel');
-const CONFIG_PATH = path.join(DEFAULT_BASE, 'paths.json');
+const LIBRARY_BASE = path.join(os.homedir(), 'Music', 'Beatdown');
+const CONFIG_DIR = envPaths('Beatdown', { suffix: '' }).config;
+const CONFIG_PATH = path.join(CONFIG_DIR, 'paths.json');
 
-export interface ReelPaths {
+export interface BeatdownPaths {
   libraryDir: string;
   playlistsDir: string;
   visualizerPresetsDir: string;
 }
 
-function load(): ReelPaths {
+function load(): BeatdownPaths {
   try {
     const raw = fs.readFileSync(CONFIG_PATH, 'utf8');
-    const parsed = JSON.parse(raw) as Partial<ReelPaths>;
+    const parsed = JSON.parse(raw) as Partial<BeatdownPaths>;
     return {
-      libraryDir: parsed.libraryDir || path.join(DEFAULT_BASE, 'Library'),
-      playlistsDir: parsed.playlistsDir || path.join(DEFAULT_BASE, 'Playlists'),
+      libraryDir: parsed.libraryDir || path.join(LIBRARY_BASE, 'Library'),
+      playlistsDir: parsed.playlistsDir || path.join(LIBRARY_BASE, 'Playlists'),
       visualizerPresetsDir:
         typeof parsed.visualizerPresetsDir === 'string'
           ? parsed.visualizerPresetsDir
-          : path.join(DEFAULT_BASE, 'Visualizer Presets'),
+          : path.join(LIBRARY_BASE, 'Visualizer Presets'),
     };
   } catch {
     return {
-      libraryDir: path.join(DEFAULT_BASE, 'Library'),
-      playlistsDir: path.join(DEFAULT_BASE, 'Playlists'),
-      visualizerPresetsDir: path.join(DEFAULT_BASE, 'Visualizer Presets'),
+      libraryDir: path.join(LIBRARY_BASE, 'Library'),
+      playlistsDir: path.join(LIBRARY_BASE, 'Playlists'),
+      visualizerPresetsDir: path.join(LIBRARY_BASE, 'Visualizer Presets'),
     };
   }
 }
 
-function save(p: ReelPaths) {
-  fs.mkdirSync(DEFAULT_BASE, { recursive: true });
+function save(p: BeatdownPaths) {
+  fs.mkdirSync(CONFIG_DIR, { recursive: true });
   fs.writeFileSync(CONFIG_PATH, JSON.stringify(p, null, 2));
 }
 
 // Singleton mutable state
-let current: ReelPaths = load();
+let current: BeatdownPaths = load();
 
 export const paths = {
   get libraryDir() { return current.libraryDir; },
   get playlistsDir() { return current.playlistsDir; },
   get visualizerPresetsDir() { return current.visualizerPresetsDir; },
 
-  getAll(): ReelPaths {
+  getAll(): BeatdownPaths {
     return { ...current };
   },
 

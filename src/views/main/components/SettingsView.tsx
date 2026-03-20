@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { $theme, themeChanged } from '../stores/theme';
 import { $appSettings, setConfirmTrackDeletion } from '../stores/appSettings';
 import type { AudioFormat, QualityPreset } from '../../../shared/types';
-import type { ReelPaths } from '../../../shared/rpc-schema';
+import type { BeatdownPaths } from '../../../shared/rpc-schema';
 import { rpc } from '../rpc';
 import {
   $visualizerSettings,
@@ -81,7 +81,7 @@ export default function SettingsView() {
   const [format, setFormat] = usePersistedState<AudioFormat>('reel:format', 'm4a');
   const [quality, setQuality] = usePersistedState<QualityPreset>('reel:quality', 'auto');
   const visualizerSettings = useUnit($visualizerSettings);
-  const [reelPaths, setReelPaths] = useState<ReelPaths | null>(null);
+  const [reelPaths, setReelPaths] = useState<BeatdownPaths | null>(null);
   const [presetCatalog, setPresetCatalog] = useState<VisualizerPresetDescriptor[]>([]);
   const [loadingPresetCatalog, setLoadingPresetCatalog] = useState(true);
   const [browsing, setBrowsing] = useState<'library' | 'playlists' | 'visualizerPresets' | null>(null);

@@ -16,7 +16,7 @@ import { downloadTrack, DownloadProgress, getExpectedAudioExtension } from './do
 import { logger } from '../logger';
 import { savePlaylist, deletePlaylist, loadAllPlaylists } from './playlist';
 
-const DEFAULT_OUTPUT_BASE = path.join(os.homedir(), 'Music', 'Reel');
+const DEFAULT_OUTPUT_BASE = path.join(os.homedir(), 'Music', 'Beatdown');
 const CONCURRENCY = 3;
 
 function sanitize(name: string): string {

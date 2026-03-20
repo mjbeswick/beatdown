@@ -220,7 +220,7 @@ export async function embedMetadata(filePath: string, meta: Metadata): Promise<s
   const outputPath = path.join(dir, `${base}_tagged${ext}`);
 
   const tmpCover = meta.coverArtUrl
-    ? path.join(os.tmpdir(), `reel_cover_${Date.now()}.jpg`)
+    ? path.join(os.tmpdir(), `beatdown_cover_${Date.now()}.jpg`)
     : null;
 
   try {

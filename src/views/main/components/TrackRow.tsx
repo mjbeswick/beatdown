@@ -1,4 +1,4 @@
-import { CheckCircle2, AlertCircle, Loader2, Clock, Trash2, Play, ListMusic } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Loader2, Clock, Trash2, Play, ListMusic, Heart } from 'lucide-react';
 import type { TrackInfo } from '../../../shared/types';
 import { fmtSpeed, fmtEta } from './DownloadRow';
 import { useContextMenu } from '../hooks/useContextMenu';
@@ -14,6 +14,7 @@ import {
 } from '../stores/player';
 import { useUnit } from 'effector-react';
 import { navToAlbum, navToArtist } from '../stores/nav';
+import { $favourites, toggleFavourite } from '../stores/favourites';
 
 function TrackIcon({ status }: { status: TrackInfo['status'] }) {
   switch (status) {
@@ -41,7 +42,9 @@ export default function TrackRow({ track, downloadId, coverArt, albumName = '', 
   const showEta = track.status === 'downloading' && !!track.eta;
   const { pos, open, close } = useContextMenu();
   const player = useUnit($player);
+  const favourites = useUnit($favourites);
   const isNowPlaying = player.current?.track.id === track.id;
+  const isFavourited = favourites.includes(track.id);
 
   const asPlayingTrack = (): PlayingTrack => ({
     track,
@@ -91,6 +94,17 @@ export default function TrackRow({ track, downloadId, coverArt, albumName = '', 
         </span>
       ) : (
         <TrackIcon status={track.status} />
+      )}
+
+      {/* Favourite button — only shown for done tracks */}
+      {isDone && (
+        <button
+          className={`shrink-0 transition-opacity ${isFavourited ? 'opacity-100' : 'opacity-0 group-hover:opacity-40 hover:!opacity-100'}`}
+          onClick={(e) => { e.stopPropagation(); toggleFavourite(track.id); }}
+          onDoubleClick={(e) => e.stopPropagation()}
+        >
+          <Heart size={11} className={isFavourited ? 'fill-rose-500 text-rose-500' : 'text-zinc-400'} />
+        </button>
       )}
 
       {/* Title + artist */}

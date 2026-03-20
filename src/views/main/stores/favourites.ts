@@ -1,21 +1,17 @@
 import { createStore, createEvent } from 'effector';
+import { rpc } from '../rpc';
+import { loadSettingsFx } from './settingsLoader';
 
-function loadFavourites(): string[] {
-  try {
-    const s = localStorage.getItem('reel:favourites');
-    return s ? (JSON.parse(s) as string[]) : [];
-  } catch {
-    return [];
-  }
-}
+export const toggleFavourite = createEvent<string>();
 
-export const toggleFavourite = createEvent<string>(); // track id
-
-export const $favourites = createStore<string[]>(loadFavourites()).on(
-  toggleFavourite,
-  (state, id) => {
+export const $favourites = createStore<string[]>([])
+  .on(loadSettingsFx.doneData, (_, data) =>
+    Array.isArray(data.favourites)
+      ? data.favourites.filter((x): x is string => typeof x === 'string')
+      : []
+  )
+  .on(toggleFavourite, (state, id) => {
     const next = state.includes(id) ? state.filter((x) => x !== id) : [...state, id];
-    try { localStorage.setItem('reel:favourites', JSON.stringify(next)); } catch {}
+    rpc.proxy.request['settings:save']({ key: 'favourites', value: next }).catch(() => {});
     return next;
-  }
-);
+  });

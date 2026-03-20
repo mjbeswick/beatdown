@@ -27,7 +27,7 @@ export async function getLyrics(artist: string, title: string): Promise<LyricLin
   try {
     const params = new URLSearchParams({ artist_name: artist, track_name: title });
     const res = await fetch(`${BASE}/get?${params}`, {
-      headers: { 'User-Agent': 'Reel/1.0 (https://github.com/reel)' },
+      headers: { 'User-Agent': 'Beatdown/1.0 (https://github.com/beatdown)' },
       signal: AbortSignal.timeout(8000),
     });
 

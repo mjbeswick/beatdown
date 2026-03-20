@@ -2,6 +2,7 @@ import { createStore, createEvent, createEffect, sample } from 'effector';
 import type { DownloadItem, TrackInfo } from '../../../shared/types';
 import { rpc } from '../rpc';
 import { downloadRemoved, downloadUpdated, loadAllFx } from './downloads';
+import { loadSettingsFx } from './settingsLoader';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -96,20 +97,6 @@ const followPlaylistTracksQueued = createEvent<{
 
 // ── Store ─────────────────────────────────────────────────────────────────────
 
-function loadPref<T>(key: string, fallback: T): T {
-  try {
-    const s = localStorage.getItem(key);
-    return s !== null ? (JSON.parse(s) as T) : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-function savePref<T>(key: string, value: T): void {
-  try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
-}
-
-const PLAYER_SESSION_STORAGE_KEY = 'reel:player-session';
 const PLAYER_SESSION_VERSION = 1 as const;
 
 function isPersistedTrackRef(value: unknown): value is PersistedTrackRef {
@@ -126,62 +113,51 @@ function sanitizeStringArray(value: unknown): string[] {
   return value.filter((entry): entry is string => typeof entry === 'string');
 }
 
-function loadPersistedPlayerSession(): { snapshot: PersistedPlayerSession | null; serialized: string } {
+function parsePlayerSession(raw: unknown): PersistedPlayerSession | null {
   try {
-    const serialized = localStorage.getItem(PLAYER_SESSION_STORAGE_KEY) ?? '';
-    if (!serialized) return { snapshot: null, serialized: '' };
-
-    const raw = JSON.parse(serialized) as Partial<PersistedPlayerSession> | null;
-    if (!raw || raw.version !== PLAYER_SESSION_VERSION) {
-      return { snapshot: null, serialized: '' };
-    }
+    const data = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    if (!data || typeof data !== 'object') return null;
+    const r = data as Partial<PersistedPlayerSession>;
+    if (r.version !== PLAYER_SESSION_VERSION) return null;
 
     return {
-      snapshot: {
-        version: PLAYER_SESSION_VERSION,
-        current: isPersistedTrackRef(raw.current) ? raw.current : null,
-        queue: Array.isArray(raw.queue) ? raw.queue.filter(isPersistedTrackRef) : [],
-        queueIndex:
-          typeof raw.queueIndex === 'number' && Number.isFinite(raw.queueIndex)
-            ? Math.max(0, Math.floor(raw.queueIndex))
-            : 0,
-        isPlaying: Boolean(raw.isPlaying),
-        currentTime:
-          typeof raw.currentTime === 'number' && Number.isFinite(raw.currentTime)
-            ? Math.max(0, raw.currentTime)
-            : 0,
-        followPlaylist:
-          raw.followPlaylist &&
-          typeof raw.followPlaylist === 'object' &&
-          typeof raw.followPlaylist.downloadId === 'string' &&
-          typeof raw.followPlaylist.albumName === 'string'
-            ? {
-                downloadId: raw.followPlaylist.downloadId,
-                albumName: raw.followPlaylist.albumName,
-                coverArt:
-                  typeof raw.followPlaylist.coverArt === 'string'
-                    ? raw.followPlaylist.coverArt
-                    : undefined,
-                trackOrder: sanitizeStringArray(raw.followPlaylist.trackOrder),
-                queuedTrackIds: sanitizeStringArray(raw.followPlaylist.queuedTrackIds),
-              }
-            : null,
-      },
-      serialized,
+      version: PLAYER_SESSION_VERSION,
+      current: isPersistedTrackRef(r.current) ? r.current : null,
+      queue: Array.isArray(r.queue) ? r.queue.filter(isPersistedTrackRef) : [],
+      queueIndex:
+        typeof r.queueIndex === 'number' && Number.isFinite(r.queueIndex)
+          ? Math.max(0, Math.floor(r.queueIndex))
+          : 0,
+      isPlaying: Boolean(r.isPlaying),
+      currentTime:
+        typeof r.currentTime === 'number' && Number.isFinite(r.currentTime)
+          ? Math.max(0, r.currentTime)
+          : 0,
+      followPlaylist:
+        r.followPlaylist &&
+        typeof r.followPlaylist === 'object' &&
+        typeof r.followPlaylist.downloadId === 'string' &&
+        typeof r.followPlaylist.albumName === 'string'
+          ? {
+              downloadId: r.followPlaylist.downloadId,
+              albumName: r.followPlaylist.albumName,
+              coverArt:
+                typeof r.followPlaylist.coverArt === 'string'
+                  ? r.followPlaylist.coverArt
+                  : undefined,
+              trackOrder: sanitizeStringArray(r.followPlaylist.trackOrder),
+              queuedTrackIds: sanitizeStringArray(r.followPlaylist.queuedTrackIds),
+            }
+          : null,
     };
   } catch {
-    return { snapshot: null, serialized: '' };
+    return null;
   }
 }
 
 function savePlayerSession(snapshot: PersistedPlayerSession | null): string {
   const serialized = snapshot ? JSON.stringify(snapshot) : '';
-
-  try {
-    if (snapshot) localStorage.setItem(PLAYER_SESSION_STORAGE_KEY, serialized);
-    else localStorage.removeItem(PLAYER_SESSION_STORAGE_KEY);
-  } catch {}
-
+  rpc.proxy.request['settings:save']({ key: 'playerSession', value: snapshot }).catch(() => {});
   return serialized;
 }
 
@@ -457,14 +433,26 @@ export const $player = createStore<PlayerState>({
   queue: [],
   queueIndex: -1,
   isPlaying: false,
-  volume: loadPref('reel:volume', 1),
-  lastVolume: loadPref('reel:volume', 1),
+  volume: 1,
+  lastVolume: 1,
   currentTime: 0,
   duration: 0,
-  shuffle: loadPref<ShuffleMode>('reel:shuffle', 'off'),
-  repeat: loadPref<RepeatMode>('reel:repeat', 'off'),
+  shuffle: 'off',
+  repeat: 'off',
   streamPort: 0,
 })
+  .on(loadSettingsFx.doneData, (state, data) => {
+    const prefs = data.playerPrefs;
+    if (!prefs) return state;
+    const volume = typeof prefs.volume === 'number' ? prefs.volume : state.volume;
+    return {
+      ...state,
+      volume,
+      lastVolume: volume,
+      shuffle: (prefs.shuffle === 'on' || prefs.shuffle === 'off') ? prefs.shuffle as ShuffleMode : state.shuffle,
+      repeat: (['off', 'one', 'all'].includes(prefs.repeat as string)) ? prefs.repeat as RepeatMode : state.repeat,
+    };
+  })
   .on(playerSessionRestored, (state, session) => ({
     ...state,
     current: session.current,
@@ -531,12 +519,13 @@ export const $player = createStore<PlayerState>({
   .on(resume, (state) => ({ ...state, isPlaying: true }))
   .on(togglePlay, (state) => ({ ...state, isPlaying: !state.isPlaying }))
   .on(setVolume, (state, volume) => {
-    savePref('reel:volume', volume);
-    return { ...state, volume, lastVolume: volume > 0 ? volume : state.lastVolume };
+    const next = { ...state, volume, lastVolume: volume > 0 ? volume : state.lastVolume };
+    rpc.proxy.request['settings:save']({ key: 'playerPrefs', value: { volume, shuffle: next.shuffle, repeat: next.repeat } }).catch(() => {});
+    return next;
   })
   .on(toggleShuffle, (state) => {
     const shuffle: ShuffleMode = state.shuffle === 'off' ? 'on' : 'off';
-    savePref('reel:shuffle', shuffle);
+    rpc.proxy.request['settings:save']({ key: 'playerPrefs', value: { volume: state.volume, shuffle, repeat: state.repeat } }).catch(() => {});
 
     if (shuffle === 'off' || state.queue.length <= 1) {
       return { ...state, shuffle };
@@ -554,7 +543,7 @@ export const $player = createStore<PlayerState>({
   .on(toggleRepeat, (state) => {
     const modes: RepeatMode[] = ['off', 'one', 'all'];
     const repeat = modes[(modes.indexOf(state.repeat) + 1) % modes.length];
-    savePref('reel:repeat', repeat);
+    rpc.proxy.request['settings:save']({ key: 'playerPrefs', value: { volume: state.volume, shuffle: state.shuffle, repeat } }).catch(() => {});
     return { ...state, repeat };
   })
   .on(timeUpdated, (state, { currentTime, duration }) => ({
@@ -660,25 +649,35 @@ rpc.proxy.request['stream:getPort'](undefined as any)
   .then(streamPortReceived)
   .catch(() => {});
 
-const { snapshot: pendingPlayerSession } = loadPersistedPlayerSession();
+let pendingSession: { snapshot: PersistedPlayerSession | null; ready: boolean } = { snapshot: null, ready: false };
+let pendingDownloads: { data: DownloadItem[]; ready: boolean } = { data: [], ready: false };
 let canPersistPlayerSession = false;
-let lastSavedPlayerSession = '';
 
-loadAllFx.doneData.watch((downloads) => {
-  if (canPersistPlayerSession) return;
-
+function tryRestorePlayerSession() {
+  if (canPersistPlayerSession || !pendingSession.ready || !pendingDownloads.ready) return;
   canPersistPlayerSession = true;
 
-  if (!pendingPlayerSession) return;
+  if (!pendingSession.snapshot) return;
 
-  const restoredSession = restorePlayerSessionFromDownloads(pendingPlayerSession, downloads ?? []);
+  const restoredSession = restorePlayerSessionFromDownloads(pendingSession.snapshot, pendingDownloads.data);
   if (restoredSession) {
     playerSessionRestored(restoredSession);
-    return;
+  } else {
+    savePlayerSession(null);
   }
+}
 
-  lastSavedPlayerSession = savePlayerSession(null);
+loadSettingsFx.doneData.watch((data) => {
+  pendingSession = { snapshot: parsePlayerSession(data.playerSession), ready: true };
+  tryRestorePlayerSession();
 });
+
+loadAllFx.doneData.watch((downloads) => {
+  pendingDownloads = { data: downloads ?? [], ready: true };
+  tryRestorePlayerSession();
+});
+
+let lastSavedPlayerSession = '';
 
 $player.updates.watch(() => {
   if (!canPersistPlayerSession) return;

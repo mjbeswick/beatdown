@@ -116,7 +116,7 @@ io.on('connection', (socket) => {
 const PORT = process.env.PORT ?? 3001;
 httpServer.listen(PORT, async () => {
   const deps = await checkDependencies();
-  console.log(`🎵  Reel server  →  http://localhost:${PORT}`);
+  console.log(`🎵  Beatdown server  →  http://localhost:${PORT}`);
   if (!deps.ytdlp) console.warn('⚠️  yt-dlp not found — install with: pip install yt-dlp');
   if (!deps.ffmpeg) console.warn('⚠️  ffmpeg not found — install from: https://ffmpeg.org');
 });
