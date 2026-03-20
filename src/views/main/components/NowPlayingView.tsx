@@ -7,6 +7,7 @@ import {
   Music2,
   ListMusic,
   Mic2,
+  Settings,
   Trash2,
   X,
 } from 'lucide-react';
@@ -26,18 +27,25 @@ import ContextMenu, { type ContextMenuEntry } from './ContextMenu';
 import ResizablePaneLayout from './ResizablePaneLayout';
 import WaveformSeeker from './WaveformSeeker';
 import { useContextMenu } from '../hooks/useContextMenu';
+import { usePersistedState } from '../hooks/usePersistedState';
+import WaveformSettingsCard from './WaveformSettingsCard';
 
-type Tab = 'lyrics' | 'queue';
+type Tab = 'queue' | 'lyrics';
 
 export default function NowPlayingView() {
   const player = useUnit($player);
   const favourites = useUnit($favourites);
   const search = useUnit($search);
   const { pos: albumArtMenuPos, open: openAlbumArtMenu, close: closeAlbumArtMenu } = useContextMenu();
-  const [tab, setTab] = useState<Tab>('lyrics');
+  const [tab, setTab] = useState<Tab>('queue');
+  const [showWaveform, setShowWaveform] = usePersistedState('reel:now-playing-waveform-visible', true);
+  const [showSidebar, setShowSidebar] = usePersistedState('reel:now-playing-sidebar-visible', true);
+  const [showConfig, setShowConfig] = useState(false);
   const [lyrics, setLyrics] = useState<LyricLine[] | null>(null);
   const [lyricsLoading, setLyricsLoading] = useState(false);
   const activeRef = useRef<HTMLDivElement>(null);
+  const configButtonRef = useRef<HTMLButtonElement>(null);
+  const configPanelRef = useRef<HTMLDivElement>(null);
   const current = player.current;
 
   const titleContainerRef = useRef<HTMLDivElement>(null);
@@ -98,6 +106,33 @@ export default function NowPlayingView() {
   useEffect(() => {
     closeAlbumArtMenu();
   }, [closeAlbumArtMenu, current?.track.id]);
+
+  useEffect(() => {
+    if (!showConfig) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (configPanelRef.current?.contains(target) || configButtonRef.current?.contains(target)) {
+        return;
+      }
+      setShowConfig(false);
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setShowConfig(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showConfig]);
 
   const getActiveLine = (): number => {
     if (!lyrics) return -1;
@@ -188,17 +223,349 @@ export default function NowPlayingView() {
     },
   ];
 
+  const sidePanel = (
+    <div className="flex h-full flex-col bg-zinc-950/30 backdrop-blur-md">
+      <div className="flex border-b border-zinc-700/60 shrink-0">
+        {(['queue', 'lyrics'] as Tab[]).map((panelTab) => (
+          <button
+            key={panelTab}
+            onClick={() => setTab(panelTab)}
+            className={`flex-1 font-semibold uppercase tracking-wider transition-colors ${
+              tab === panelTab
+                ? 'text-zinc-100 border-b-2 border-emerald-400'
+                : 'text-zinc-500 hover:text-zinc-300'
+            }`}
+            style={{
+              paddingBlock: 'clamp(0.65rem, 1.3vmin, 0.85rem)',
+              fontSize: 'clamp(0.62rem, 0.95vmin, 0.78rem)',
+            }}
+          >
+            {panelTab === 'queue'
+              ? `Queue${upcomingQueue.length > 0 ? ` · ${upcomingQueue.length}` : ''}`
+              : 'Lyrics'}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'queue' && (
+        <div className="flex-1 overflow-y-auto">
+          {upcomingQueue.length === 0 ? (
+            <div className="h-full flex items-center justify-center text-zinc-600" style={{ fontSize: 'clamp(0.8rem, 1.15vmin, 0.95rem)' }}>
+              Queue is empty
+            </div>
+          ) : (
+            upcomingQueue.map(({ item, queueIdx }) => (
+              <div
+                key={`${item.track.id}:${queueIdx}`}
+                className="group flex items-center gap-3 border-b border-zinc-100/5 hover:bg-zinc-100/4 transition-colors"
+                style={{ padding: 'clamp(0.75rem, 1.5vmin, 0.95rem)' }}
+              >
+                <button
+                  onClick={() => jumpToQueueIndex(queueIdx)}
+                  className="shrink-0 w-10 h-10 rounded overflow-hidden bg-zinc-800 hover:ring-1 hover:ring-emerald-400/60 transition-all"
+                  title={`Play ${item.track.title}`}
+                >
+                  {item.coverArt ? (
+                    <img src={item.coverArt} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <ListMusic size={16} className="text-zinc-600" />
+                    </div>
+                  )}
+                </button>
+
+                <div className="min-w-0 flex-1">
+                  <button
+                    onClick={() => jumpToQueueIndex(queueIdx)}
+                    className="block w-full text-left truncate text-zinc-200 hover:text-zinc-100 transition-colors"
+                    style={{ fontSize: 'clamp(0.8rem, 1.05vmin, 0.95rem)' }}
+                    title={item.track.title}
+                  >
+                    {item.track.title}
+                  </button>
+                  <div className="flex items-center gap-1.5 text-zinc-500" style={{ fontSize: 'clamp(0.72rem, 0.9vmin, 0.82rem)' }}>
+                    <button
+                      onClick={() => navToArtist(item.track.artist)}
+                      className="truncate hover:text-zinc-300 transition-colors"
+                      title={item.track.artist}
+                    >
+                      {item.track.artist}
+                    </button>
+                    <span>·</span>
+                    <button
+                      onClick={() => item.downloadId && navToAlbum(item.downloadId)}
+                      className="truncate hover:text-zinc-300 transition-colors"
+                      title={item.albumName}
+                    >
+                      {item.albumName}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button
+                    onClick={() => jumpToQueueIndex(queueIdx)}
+                    className="text-zinc-500 hover:text-emerald-300 transition-colors"
+                    aria-label="Play queued track"
+                  >
+                    <Play size={14} className="fill-current" />
+                  </button>
+                  <button
+                    onClick={() => removeFromQueue(queueIdx)}
+                    className="text-zinc-600 hover:text-red-400 transition-colors"
+                    aria-label="Remove from queue"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {tab === 'lyrics' && (
+        <div
+          className="flex-1 overflow-y-auto space-y-1"
+          style={{
+            padding: 'clamp(0.9rem, 2vmin, 1.3rem)',
+            maskImage: 'linear-gradient(to bottom, transparent 0%, black 12%, black 88%, transparent 100%)',
+            WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 12%, black 88%, transparent 100%)',
+          }}
+        >
+          {lyricsLoading && (
+            <div className="space-y-2.5 mt-8 pr-2">
+              {[75, 55, 88, 45, 68, 82, 50, 72, 60].map((width, i) => (
+                <div
+                  key={i}
+                  className="h-2.5 bg-zinc-700/50 rounded-full animate-pulse"
+                  style={{ width: `${width}%`, animationDelay: `${i * 80}ms` }}
+                />
+              ))}
+            </div>
+          )}
+
+          {!lyricsLoading && !lyrics && (
+            <p className="text-zinc-600 text-center mt-8" style={{ fontSize: 'clamp(0.8rem, 1.2vmin, 0.95rem)' }}>
+              No lyrics found
+            </p>
+          )}
+
+          {lyrics && lyrics.map((line, i) => {
+            const isActive = i === activeLine;
+            return (
+              <div
+                key={i}
+                ref={isActive ? activeRef : undefined}
+                className={`leading-relaxed transition-all duration-200 origin-left ${
+                  isActive
+                    ? 'text-zinc-100 font-medium scale-105'
+                    : i < activeLine
+                    ? 'text-zinc-600'
+                    : 'text-zinc-400'
+                }`}
+                style={{
+                  fontSize: 'clamp(0.84rem, 1.2vmin, 1.02rem)',
+                  ...(isActive ? { textShadow: 'var(--now-playing-active-lyric-shadow)' } : {}),
+                }}
+              >
+                {line.text || '\u00a0'}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+
+  const mainContent = (
+    <div
+      className="relative flex h-full flex-col items-center justify-center min-w-0"
+      style={{
+        gap: 'clamp(1.25rem, 3vmin, 2.4rem)',
+        paddingInline: 'clamp(1rem, 4vmin, 3.25rem)',
+        paddingBlock: 'clamp(1rem, 4vmin, 3rem)',
+      }}
+    >
+      <div
+        className="absolute z-20"
+        style={{
+          top: 'clamp(1rem, 2.4vmin, 1.6rem)',
+          right: 'clamp(1rem, 2.8vmin, 1.75rem)',
+        }}
+      >
+        <div className="relative flex justify-end">
+          <button
+            ref={configButtonRef}
+            onClick={() => setShowConfig((visible) => !visible)}
+            title={showConfig ? 'Close now playing settings' : 'Configure now playing'}
+            className={`flex h-11 w-11 items-center justify-center rounded-full border backdrop-blur-md transition-colors ${
+              showConfig
+                ? 'border-emerald-400/60 bg-zinc-950/55 text-zinc-100 shadow-lg shadow-black/30'
+                : 'border-zinc-100/10 bg-zinc-950/35 text-zinc-400 hover:border-zinc-100/20 hover:bg-zinc-950/50 hover:text-zinc-100'
+            }`}
+            aria-label={showConfig ? 'Close now playing settings' : 'Open now playing settings'}
+            aria-expanded={showConfig}
+            aria-haspopup="dialog"
+          >
+            <Settings size={18} />
+          </button>
+
+          {showConfig && (
+            <div
+              ref={configPanelRef}
+              role="dialog"
+              aria-label="Now playing settings"
+              className="absolute right-0 top-full mt-3 flex flex-col gap-3 rounded-2xl border border-zinc-100/10 bg-zinc-950/90 p-3 shadow-2xl backdrop-blur-2xl"
+              style={{
+                width: 'min(22rem, calc(100vw - 2rem))',
+              }}
+            >
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-zinc-500">Now Playing</p>
+                <p className="mt-1 text-sm text-zinc-300">Quick controls for the waveform and right sidebar.</p>
+              </div>
+
+              <label className="flex items-center justify-between gap-4 rounded-xl border border-zinc-100/10 bg-zinc-100/[0.03] px-3 py-2.5">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-zinc-100">Show waveform</p>
+                  <p className="mt-0.5 text-xs text-zinc-500">Show or hide the waveform seeker below the track details.</p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={showWaveform}
+                  onChange={(e) => setShowWaveform(e.target.checked)}
+                  className="h-4 w-4 shrink-0 accent-emerald-500"
+                />
+              </label>
+
+              <label className="flex items-center justify-between gap-4 rounded-xl border border-zinc-100/10 bg-zinc-100/[0.03] px-3 py-2.5">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-zinc-100">Show sidebar</p>
+                  <p className="mt-0.5 text-xs text-zinc-500">Toggle the queue and lyrics panel on the right.</p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={showSidebar}
+                  onChange={(e) => setShowSidebar(e.target.checked)}
+                  className="h-4 w-4 shrink-0 accent-emerald-500"
+                />
+              </label>
+
+              <WaveformSettingsCard className="rounded-xl overflow-hidden border border-zinc-100/10 bg-zinc-100/[0.03]" />
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div
+        className={`aspect-square rounded-2xl overflow-hidden shadow-2xl transition-all duration-500 ${
+          player.isPlaying ? 'scale-100 shadow-black/60' : 'scale-[0.93] shadow-black/40 opacity-80'
+        }`}
+        style={{ width: 'clamp(12rem, 38vmin, 28rem)' }}
+        onContextMenu={openAlbumArtMenu}
+        title="Right-click for track actions"
+      >
+        {current.coverArt ? (
+          <img
+            src={current.coverArt}
+            alt="Album art"
+            className="w-full h-full object-cover"
+            draggable={false}
+          />
+        ) : (
+          <div className="w-full h-full bg-zinc-800 flex items-center justify-center">
+            <Music2
+              strokeWidth={1}
+              className="text-zinc-600"
+              style={{ width: 'clamp(3rem, 9vmin, 5rem)', height: 'clamp(3rem, 9vmin, 5rem)' }}
+            />
+          </div>
+        )}
+      </div>
+
+      {albumArtMenuPos && (
+        <ContextMenu
+          x={albumArtMenuPos.x}
+          y={albumArtMenuPos.y}
+          onClose={closeAlbumArtMenu}
+          items={albumArtMenuItems}
+        />
+      )}
+
+      <div className="w-full text-center space-y-1.5" style={{ maxWidth: 'min(34rem, 64vw)' }}>
+        <div className="flex items-center justify-center gap-2">
+          <div ref={titleContainerRef} className="overflow-hidden min-w-0">
+            <h2
+              ref={titleRef}
+              className="font-bold text-zinc-100 cursor-pointer hover:underline whitespace-nowrap"
+              onClick={() => current.downloadId && navToAlbum(current.downloadId)}
+              title={current.track.title}
+              style={
+                marqueeShift > 0
+                  ? ({
+                      display: 'inline-block',
+                      animation: 'marquee-scroll 8s ease-in-out infinite alternate',
+                      '--marquee-shift': `-${marqueeShift}px`,
+                      fontSize: 'clamp(1.45rem, 3.8vmin, 3rem)',
+                      lineHeight: '1.05',
+                    } as React.CSSProperties)
+                  : ({
+                      fontSize: 'clamp(1.45rem, 3.8vmin, 3rem)',
+                      lineHeight: '1.05',
+                    } as React.CSSProperties)
+              }
+            >
+              {current.track.title}
+            </h2>
+          </div>
+          <button
+            onClick={() => toggleFavourite(current.track.id)}
+            className={`shrink-0 transition-colors ${isFav ? 'text-rose-400' : 'text-zinc-600 hover:text-rose-400'}`}
+            aria-label={isFav ? 'Remove from favourites' : 'Add to favourites'}
+          >
+            <Heart
+              fill={isFav ? 'currentColor' : 'none'}
+              style={{ width: 'clamp(1rem, 2vmin, 1.35rem)', height: 'clamp(1rem, 2vmin, 1.35rem)' }}
+            />
+          </button>
+        </div>
+
+        <button
+          className="text-zinc-400 hover:text-zinc-200 hover:underline flex items-center gap-1.5 mx-auto transition-colors"
+          onClick={() => navToArtist(current.track.artist)}
+          style={{ fontSize: 'clamp(0.95rem, 1.8vmin, 1.3rem)' }}
+        >
+          <Mic2
+            className="shrink-0"
+            style={{ width: 'clamp(0.75rem, 1.2vmin, 0.95rem)', height: 'clamp(0.75rem, 1.2vmin, 0.95rem)' }}
+          />
+          {current.track.artist}
+        </button>
+
+        <button
+          className="text-zinc-500 hover:text-zinc-300 hover:underline transition-colors"
+          onClick={() => current.downloadId && navToAlbum(current.downloadId)}
+          style={{ fontSize: 'clamp(0.78rem, 1.3vmin, 1rem)' }}
+        >
+          {current.albumName}
+        </button>
+      </div>
+
+      {showWaveform && <WaveformSeeker />}
+    </div>
+  );
+
   return (
-    <div className="flex-1 flex overflow-hidden relative">
+    <div className="now-playing-view flex-1 flex overflow-hidden relative">
       {([0, 1] as const).map((slot) =>
         bgSlots[slot] ? (
           <img
             key={slot}
             src={bgSlots[slot]}
             aria-hidden
-            className="absolute inset-0 w-full h-full object-cover scale-150 pointer-events-none select-none"
+            className="now-playing-blur-art absolute inset-0 w-full h-full object-cover scale-150 pointer-events-none select-none"
             style={{
-              filter: 'blur(80px) saturate(1.6) brightness(0.22)',
               opacity: activeSlot === slot ? 1 : 0,
               transition: 'opacity 1.4s ease',
             }}
@@ -206,277 +573,24 @@ export default function NowPlayingView() {
         ) : null
       )}
 
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{ background: 'linear-gradient(to right, rgba(0,0,0,0.3) 0%, transparent 50%, rgba(0,0,0,0.5) 100%)' }}
-      />
+      <div className="now-playing-overlay absolute inset-0 pointer-events-none" />
 
       <div className="relative z-10 flex flex-1 overflow-hidden">
-        <ResizablePaneLayout
-          side="right"
-          storageKey="reel:now-playing-panel-width"
-          defaultWidth={360}
-          minPaneWidth={240}
-          maxPaneWidth={520}
-          minContentWidth={480}
-          pane={
-            <div className="flex h-full flex-col bg-black/30 backdrop-blur-md">
-              <div className="flex border-b border-zinc-700/60 shrink-0">
-                {(['lyrics', 'queue'] as Tab[]).map((panelTab) => (
-                  <button
-                    key={panelTab}
-                    onClick={() => setTab(panelTab)}
-                    className={`flex-1 font-semibold uppercase tracking-wider transition-colors ${
-                      tab === panelTab
-                        ? 'text-zinc-100 border-b-2 border-emerald-400'
-                        : 'text-zinc-500 hover:text-zinc-300'
-                    }`}
-                    style={{
-                      paddingBlock: 'clamp(0.65rem, 1.3vmin, 0.85rem)',
-                      fontSize: 'clamp(0.62rem, 0.95vmin, 0.78rem)',
-                    }}
-                  >
-                    {panelTab === 'lyrics' ? 'Lyrics' : `Queue${upcomingQueue.length > 0 ? ` · ${upcomingQueue.length}` : ''}`}
-                  </button>
-                ))}
-              </div>
-
-              {tab === 'lyrics' && (
-                <div
-                  className="flex-1 overflow-y-auto space-y-1"
-                  style={{
-                    padding: 'clamp(0.9rem, 2vmin, 1.3rem)',
-                    maskImage: 'linear-gradient(to bottom, transparent 0%, black 12%, black 88%, transparent 100%)',
-                    WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 12%, black 88%, transparent 100%)',
-                  }}
-                >
-                  {lyricsLoading && (
-                    <div className="space-y-2.5 mt-8 pr-2">
-                      {[75, 55, 88, 45, 68, 82, 50, 72, 60].map((width, i) => (
-                        <div
-                          key={i}
-                          className="h-2.5 bg-zinc-700/50 rounded-full animate-pulse"
-                          style={{ width: `${width}%`, animationDelay: `${i * 80}ms` }}
-                        />
-                      ))}
-                    </div>
-                  )}
-
-                  {!lyricsLoading && !lyrics && (
-                    <p className="text-zinc-600 text-center mt-8" style={{ fontSize: 'clamp(0.8rem, 1.2vmin, 0.95rem)' }}>
-                      No lyrics found
-                    </p>
-                  )}
-
-                  {lyrics && lyrics.map((line, i) => {
-                    const isActive = i === activeLine;
-                    return (
-                      <div
-                        key={i}
-                        ref={isActive ? activeRef : undefined}
-                        className={`leading-relaxed transition-all duration-200 origin-left ${
-                          isActive
-                            ? 'text-white font-medium scale-105'
-                            : i < activeLine
-                            ? 'text-zinc-600'
-                            : 'text-zinc-400'
-                        }`}
-                        style={{
-                          fontSize: 'clamp(0.84rem, 1.2vmin, 1.02rem)',
-                          ...(isActive ? { textShadow: '0 0 20px rgba(255,255,255,0.2)' } : {}),
-                        }}
-                      >
-                        {line.text || '\u00a0'}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {tab === 'queue' && (
-                <div className="flex-1 overflow-y-auto">
-                  {upcomingQueue.length === 0 ? (
-                    <div className="h-full flex items-center justify-center text-zinc-600" style={{ fontSize: 'clamp(0.8rem, 1.15vmin, 0.95rem)' }}>
-                      Queue is empty
-                    </div>
-                  ) : (
-                    upcomingQueue.map(({ item, queueIdx }) => (
-                      <div
-                        key={`${item.track.id}:${queueIdx}`}
-                        className="group flex items-center gap-3 border-b border-white/5 hover:bg-white/4 transition-colors"
-                        style={{ padding: 'clamp(0.75rem, 1.5vmin, 0.95rem)' }}
-                      >
-                        <button
-                          onClick={() => jumpToQueueIndex(queueIdx)}
-                          className="shrink-0 w-10 h-10 rounded overflow-hidden bg-zinc-800 hover:ring-1 hover:ring-emerald-400/60 transition-all"
-                          title={`Play ${item.track.title}`}
-                        >
-                          {item.coverArt ? (
-                            <img src={item.coverArt} alt="" className="w-full h-full object-cover" />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center">
-                              <ListMusic size={16} className="text-zinc-600" />
-                            </div>
-                          )}
-                        </button>
-
-                        <div className="min-w-0 flex-1">
-                          <button
-                            onClick={() => jumpToQueueIndex(queueIdx)}
-                            className="block w-full text-left truncate text-zinc-200 hover:text-white transition-colors"
-                            style={{ fontSize: 'clamp(0.8rem, 1.05vmin, 0.95rem)' }}
-                            title={item.track.title}
-                          >
-                            {item.track.title}
-                          </button>
-                          <div className="flex items-center gap-1.5 text-zinc-500" style={{ fontSize: 'clamp(0.72rem, 0.9vmin, 0.82rem)' }}>
-                            <button
-                              onClick={() => navToArtist(item.track.artist)}
-                              className="truncate hover:text-zinc-300 transition-colors"
-                              title={item.track.artist}
-                            >
-                              {item.track.artist}
-                            </button>
-                            <span>·</span>
-                            <button
-                              onClick={() => item.downloadId && navToAlbum(item.downloadId)}
-                              className="truncate hover:text-zinc-300 transition-colors"
-                              title={item.albumName}
-                            >
-                              {item.albumName}
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-1.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button
-                            onClick={() => jumpToQueueIndex(queueIdx)}
-                            className="text-zinc-500 hover:text-emerald-300 transition-colors"
-                            aria-label="Play queued track"
-                          >
-                            <Play size={14} className="fill-current" />
-                          </button>
-                          <button
-                            onClick={() => removeFromQueue(queueIdx)}
-                            className="text-zinc-600 hover:text-red-400 transition-colors"
-                            aria-label="Remove from queue"
-                          >
-                            <X size={14} />
-                          </button>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              )}
-            </div>
-          }
-        >
-          <div
-            className="flex h-full flex-col items-center justify-center min-w-0"
-            style={{
-              gap: 'clamp(1.25rem, 3vmin, 2.4rem)',
-              paddingInline: 'clamp(1rem, 4vmin, 3.25rem)',
-              paddingBlock: 'clamp(1rem, 4vmin, 3rem)',
-            }}
+        {showSidebar ? (
+          <ResizablePaneLayout
+            side="right"
+            storageKey="reel:now-playing-panel-width"
+            defaultWidth={360}
+            minPaneWidth={240}
+            maxPaneWidth={520}
+            minContentWidth={480}
+            pane={sidePanel}
           >
-            <div
-              className={`aspect-square rounded-2xl overflow-hidden shadow-2xl transition-all duration-500 ${
-                player.isPlaying ? 'scale-100 shadow-black/60' : 'scale-[0.93] shadow-black/40 opacity-80'
-              }`}
-              style={{ width: 'clamp(12rem, 38vmin, 28rem)' }}
-              onContextMenu={openAlbumArtMenu}
-              title="Right-click for track actions"
-            >
-              {current.coverArt ? (
-                <img
-                  src={current.coverArt}
-                  alt="Album art"
-                  className="w-full h-full object-cover"
-                  draggable={false}
-                />
-              ) : (
-                <div className="w-full h-full bg-zinc-800 flex items-center justify-center">
-                  <Music2
-                    strokeWidth={1}
-                    className="text-zinc-600"
-                    style={{ width: 'clamp(3rem, 9vmin, 5rem)', height: 'clamp(3rem, 9vmin, 5rem)' }}
-                  />
-                </div>
-              )}
-            </div>
-
-            {albumArtMenuPos && (
-              <ContextMenu
-                x={albumArtMenuPos.x}
-                y={albumArtMenuPos.y}
-                onClose={closeAlbumArtMenu}
-                items={albumArtMenuItems}
-              />
-            )}
-
-            <div className="w-full text-center space-y-1.5" style={{ maxWidth: 'min(34rem, 64vw)' }}>
-              <div className="flex items-center justify-center gap-2">
-                <div ref={titleContainerRef} className="overflow-hidden min-w-0">
-                  <h2
-                    ref={titleRef}
-                    className="font-bold text-zinc-100 cursor-pointer hover:underline whitespace-nowrap"
-                    onClick={() => current.downloadId && navToAlbum(current.downloadId)}
-                    title={current.track.title}
-                    style={
-                      marqueeShift > 0
-                        ? ({
-                            display: 'inline-block',
-                            animation: 'marquee-scroll 8s ease-in-out infinite alternate',
-                            '--marquee-shift': `-${marqueeShift}px`,
-                            fontSize: 'clamp(1.45rem, 3.8vmin, 3rem)',
-                            lineHeight: '1.05',
-                          } as React.CSSProperties)
-                        : ({
-                            fontSize: 'clamp(1.45rem, 3.8vmin, 3rem)',
-                            lineHeight: '1.05',
-                          } as React.CSSProperties)
-                    }
-                  >
-                    {current.track.title}
-                  </h2>
-                </div>
-                <button
-                  onClick={() => toggleFavourite(current.track.id)}
-                  className={`shrink-0 transition-colors ${isFav ? 'text-rose-400' : 'text-zinc-600 hover:text-rose-400'}`}
-                  aria-label={isFav ? 'Remove from favourites' : 'Add to favourites'}
-                >
-                  <Heart
-                    fill={isFav ? 'currentColor' : 'none'}
-                    style={{ width: 'clamp(1rem, 2vmin, 1.35rem)', height: 'clamp(1rem, 2vmin, 1.35rem)' }}
-                  />
-                </button>
-              </div>
-
-              <button
-                className="text-zinc-400 hover:text-zinc-200 hover:underline flex items-center gap-1.5 mx-auto transition-colors"
-                onClick={() => navToArtist(current.track.artist)}
-                style={{ fontSize: 'clamp(0.95rem, 1.8vmin, 1.3rem)' }}
-              >
-                <Mic2
-                  className="shrink-0"
-                  style={{ width: 'clamp(0.75rem, 1.2vmin, 0.95rem)', height: 'clamp(0.75rem, 1.2vmin, 0.95rem)' }}
-                />
-                {current.track.artist}
-              </button>
-
-              <button
-                className="text-zinc-500 hover:text-zinc-300 hover:underline transition-colors"
-                onClick={() => current.downloadId && navToAlbum(current.downloadId)}
-                style={{ fontSize: 'clamp(0.78rem, 1.3vmin, 1rem)' }}
-              >
-                {current.albumName}
-              </button>
-            </div>
-
-            <WaveformSeeker />
-          </div>
-        </ResizablePaneLayout>
+            {mainContent}
+          </ResizablePaneLayout>
+        ) : (
+          <div className="flex-1 min-w-0 min-h-0 overflow-hidden">{mainContent}</div>
+        )}
       </div>
     </div>
   );

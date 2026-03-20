@@ -11,7 +11,6 @@ const SKELETON_HEIGHTS = Array.from(
   (_, i) => 25 + Math.abs(Math.sin(i * 0.45 + 0.3)) * 60,
 );
 
-// Height scales with available width, clamped to reasonable limits
 function calcHeight(width: number): number {
   return Math.round(Math.max(80, Math.min(160, width * 0.15)));
 }
@@ -20,24 +19,20 @@ export default function WaveformSeeker() {
   const player = useUnit($player);
   const { waveformBarWidth, waveformBarGap, waveformBarRadius } = useUnit($appSettings);
 
-  // outerRef: full-width layout div measured by ResizeObserver
-  // containerRef: fixed-pixel-width div that WaveSurfer lives in — only updated after debounce
-  //   so WaveSurfer never sees continuous resize, eliminating re-render lag
   const outerRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WaveSurfer | null>(null);
-  const seekingFromWS = useRef(false);
   const loadedTrackId = useRef<string | null>(null);
   const defaultPxPerSecRef = useRef(0);
   const isZoomedRef = useRef(false);
-  const isZoomingRef = useRef(false);
-  const zoomDebounceRef = useRef<ReturnType<typeof setTimeout>>();
   const resizeDebounceRef = useRef<ReturnType<typeof setTimeout>>();
-  const scrollRafRef = useRef<number | null>(null);
-  // Refs for values needed inside resize callback (avoids stale closures)
   const waveHeightRef = useRef(80);
-  const currentTimeRef = useRef(0);
-  currentTimeRef.current = player.currentTime;
+
+  // Refs so WaveSurfer event callbacks always see the latest player state
+  const playerCurrentTimeRef = useRef(player.currentTime);
+  const playerIsPlayingRef = useRef(player.isPlaying);
+  playerCurrentTimeRef.current = player.currentTime;
+  playerIsPlayingRef.current = player.isPlaying;
 
   const [zoomMultiplier, setZoomMultiplier] = usePersistedState('reel:waveform-zoom', 1);
   const zoomMultiplierRef = useRef(zoomMultiplier);
@@ -47,9 +42,8 @@ export default function WaveformSeeker() {
   const [ready, setReady] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // Measure container on mount and watch for resizes.
-  // WaveSurfer's container width is set as a fixed pixel value updated only after debounce,
-  // so WaveSurfer doesn't continuously re-render during panel drags.
+  // Fixed-pixel-width container updated only after resize settles — prevents
+  // WaveSurfer's internal ResizeObserver from re-rendering on every drag pixel.
   useLayoutEffect(() => {
     const outer = outerRef.current;
     const container = containerRef.current;
@@ -61,31 +55,16 @@ export default function WaveformSeeker() {
       waveHeightRef.current = h;
       setWaveHeight(h);
       wsRef.current?.setOptions({ height: h });
-
-      // Re-sync scroll position after WaveSurfer re-renders to new width
-      if (isZoomedRef.current && wsRef.current) {
-        if (scrollRafRef.current !== null) cancelAnimationFrame(scrollRafRef.current);
-        scrollRafRef.current = requestAnimationFrame(() => {
-          scrollRafRef.current = null;
-          const ws = wsRef.current;
-          if (!ws) return;
-          const duration = ws.getDuration();
-          if (duration <= 0) return;
-          const progress = currentTimeRef.current / duration;
-          const scrollEl = ws.getWrapper().parentElement;
-          if (!scrollEl) return;
-          scrollEl.scrollLeft = Math.max(0, progress * scrollEl.scrollWidth - scrollEl.clientWidth / 2);
-        });
-      }
     };
 
-    // Set initial size immediately (synchronous, before first paint)
     applySize(outer.clientWidth);
 
     const observer = new ResizeObserver(([entry]) => {
-      const w = Math.round(entry.contentRect.width);
       clearTimeout(resizeDebounceRef.current);
-      resizeDebounceRef.current = setTimeout(() => applySize(w), 150);
+      resizeDebounceRef.current = setTimeout(
+        () => applySize(Math.round(entry.contentRect.width)),
+        150,
+      );
     });
 
     observer.observe(outer);
@@ -112,20 +91,19 @@ export default function WaveformSeeker() {
       normalize: true,
       interact: true,
       autoplay: false,
-      autoScroll: false,
-      autoCenter: false,
-      plugins: [
-        ZoomPlugin.create({
-          scale: 0.5,
-          maxZoom: 200,
-        }),
-      ],
+      // Let WaveSurfer's own timer drive rendering at 60fps — this is what
+      // makes the examples smooth. It fires when ws.play() is called.
+      autoScroll: true,
+      autoCenter: true,
+      plugins: [ZoomPlugin.create({ scale: 0.5, maxZoom: 200 })],
     });
 
-    ws.on('load', () => {
-      setReady(false);
-      setLoading(true);
-    });
+    // WaveSurfer plays its own muted audio solely to keep its internal RAF
+    // timer alive. The timer calls renderProgress() once per frame (no double-
+    // render from seeked events) and drives autoScroll/autoCenter natively.
+    ws.setVolume(0);
+
+    ws.on('load', () => { setReady(false); setLoading(true); });
 
     ws.on('ready', () => {
       const width = containerRef.current?.clientWidth ?? 0;
@@ -136,6 +114,12 @@ export default function WaveformSeeker() {
       if (zoomMultiplierRef.current > 1) {
         ws.zoom(defaultPps * zoomMultiplierRef.current);
         isZoomedRef.current = true;
+      }
+
+      // Sync to the engine's current position before starting playback
+      ws.setTime(playerCurrentTimeRef.current);
+      if (playerIsPlayingRef.current) {
+        ws.play().catch(() => {});
       }
 
       setReady(true);
@@ -150,24 +134,14 @@ export default function WaveformSeeker() {
       if (defaultPps > 0) {
         setZoomMultiplier(isZoomedRef.current ? pxPerSec / defaultPps : 1);
       }
-      isZoomingRef.current = true;
-      clearTimeout(zoomDebounceRef.current);
-      zoomDebounceRef.current = setTimeout(() => {
-        isZoomingRef.current = false;
-      }, 400);
     });
 
-    ws.on('interaction', (time) => {
-      seekingFromWS.current = true;
-      seek(time);
-      setTimeout(() => { seekingFromWS.current = false; }, 300);
-    });
+    // Seek the engine when the user clicks/drags the waveform
+    ws.on('interaction', (time) => seek(time));
 
     wsRef.current = ws;
 
     return () => {
-      clearTimeout(zoomDebounceRef.current);
-      if (scrollRafRef.current !== null) cancelAnimationFrame(scrollRafRef.current);
       ws.destroy();
       wsRef.current = null;
       loadedTrackId.current = null;
@@ -177,7 +151,7 @@ export default function WaveformSeeker() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [waveformBarWidth, waveformBarGap, waveformBarRadius]);
 
-  // Load waveform when track changes
+  // Load waveform data when track changes
   useEffect(() => {
     const ws = wsRef.current;
     const { current, streamPort } = player;
@@ -189,30 +163,25 @@ export default function WaveformSeeker() {
     ws.load(getStreamUrl(current.track.filePath, streamPort)).catch(() => {});
   }, [player.current?.track.id, player.streamPort]);
 
-  // Sync cursor and scroll to follow playhead when zoomed
+  // Mirror engine play/pause → WaveSurfer (keeps its internal timer running)
   useEffect(() => {
-    if (!ready) return;
     const ws = wsRef.current;
-    if (!ws) return;
-
-    if (!seekingFromWS.current) {
-      ws.setTime(player.currentTime);
+    if (!ws || !ready) return;
+    if (player.isPlaying) {
+      // Re-sync position in case of pause → seek → resume
+      ws.setTime(playerCurrentTimeRef.current);
+      ws.play().catch(() => {});
+    } else {
+      ws.pause();
     }
+  }, [player.isPlaying, ready]);
 
-    if (isZoomedRef.current && !isZoomingRef.current) {
-      const duration = ws.getDuration();
-      if (duration <= 0) return;
-      const progress = player.currentTime / duration;
-      if (scrollRafRef.current !== null) cancelAnimationFrame(scrollRafRef.current);
-      scrollRafRef.current = requestAnimationFrame(() => {
-        scrollRafRef.current = null;
-        const scrollEl = ws.getWrapper().parentElement;
-        if (!scrollEl) return;
-        scrollEl.scrollLeft = Math.max(
-          0,
-          progress * scrollEl.scrollWidth - scrollEl.clientWidth / 2,
-        );
-      });
+  // Correct drift when the engine seeks (e.g. user drags the seek bar)
+  useEffect(() => {
+    const ws = wsRef.current;
+    if (!ws || !ready) return;
+    if (Math.abs(ws.getCurrentTime() - player.currentTime) > 0.5) {
+      ws.setTime(player.currentTime);
     }
   }, [player.currentTime, ready]);
 

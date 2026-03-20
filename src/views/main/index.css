@@ -78,6 +78,37 @@ body {
 /* Also fix the search-box placeholder which uses the same zinc-600 token. */
 .light-theme .placeholder\:text-zinc-600::placeholder { color: #52525b; }
 
+/* ── Now Playing light-theme tuning ───────────────────────────────────────── */
+.now-playing-view {
+  --now-playing-blur-filter: blur(80px) saturate(1.6) brightness(0.22);
+  --now-playing-overlay: linear-gradient(
+    to right,
+    rgba(0, 0, 0, 0.3) 0%,
+    transparent 50%,
+    rgba(0, 0, 0, 0.5) 100%
+  );
+  --now-playing-active-lyric-shadow: 0 0 20px rgba(255, 255, 255, 0.2);
+}
+
+.now-playing-blur-art {
+  filter: var(--now-playing-blur-filter);
+}
+
+.now-playing-overlay {
+  background: var(--now-playing-overlay);
+}
+
+.light-theme .now-playing-view {
+  --now-playing-blur-filter: blur(88px) saturate(1.05) brightness(0.78);
+  --now-playing-overlay: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.84) 0%,
+    rgba(255, 255, 255, 0.5) 42%,
+    rgba(244, 244, 245, 0.74) 100%
+  );
+  --now-playing-active-lyric-shadow: 0 0 18px rgba(255, 255, 255, 0.72);
+}
+
 /* Soundbar animation used in the Sidebar Now Playing indicator */
 @keyframes soundbar {
   0%, 100% { transform: scaleY(0.4); }
