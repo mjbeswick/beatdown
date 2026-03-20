@@ -227,7 +227,7 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
       {/* Volume + lyrics + cast */}
       <div className="flex items-center gap-2 w-36 justify-end shrink-0">
         <button
-          onClick={() => setVolume(player.volume > 0 ? 0 : 0.8)}
+          onClick={() => setVolume(player.volume > 0 ? 0 : (player.lastVolume || 0.8))}
           className="text-zinc-500 hover:text-zinc-300 transition-colors shrink-0"
           title={player.volume === 0 ? 'Unmute' : 'Mute'}
         >
@@ -240,9 +240,12 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
           step={0.01}
           value={player.volume}
           onChange={(e) => setVolume(parseFloat(e.target.value))}
-          className="w-18 h-1 appearance-none rounded-full cursor-pointer volume-slider"
+          disabled={cast.isCasting}
+          className={`w-18 h-1 appearance-none rounded-full volume-slider ${
+            cast.isCasting ? 'cursor-not-allowed opacity-40' : 'cursor-pointer'
+          }`}
           style={{ '--progress': `${player.volume * 100}%`, width: '72px' } as React.CSSProperties}
-          title="Volume"
+          title={cast.isCasting ? 'Local volume disabled while casting' : 'Volume'}
         />
         <button
           onClick={onLyricsToggle}

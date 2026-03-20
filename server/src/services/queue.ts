@@ -12,7 +12,7 @@ import {
   TrackInfo,
   TrackStatus,
 } from '../types';
-import { downloadTrack, DownloadProgress } from './downloader';
+import { downloadTrack, DownloadProgress, getExpectedAudioExtension } from './downloader';
 import { logger } from '../logger';
 import { savePlaylist, deletePlaylist, loadAllPlaylists } from './playlist';
 
@@ -21,6 +21,11 @@ const CONCURRENCY = 3;
 
 function sanitize(name: string): string {
   return name.replace(/[<>:"/\\|?*\x00-\x1f]/g, '').trim() || 'Unknown';
+}
+
+function hasTrackFileForFormat(track: TrackInfo, format: AudioFormat): boolean {
+  if (!track.filePath || !fs.existsSync(track.filePath)) return false;
+  return track.filePath.toLowerCase().endsWith(getExpectedAudioExtension(format));
 }
 
 export class DownloadQueue extends EventEmitter {
@@ -167,35 +172,51 @@ export class DownloadQueue extends EventEmitter {
     }
     this.pendingTracks = this.pendingTracks.filter((p) => p.downloadId !== id);
 
+    let queuedTracks = 0;
     for (const track of item.tracks) {
+      const hasMatchingFile = hasTrackFileForFormat(track, item.format);
+
+      if (hasMatchingFile) {
+        track.status = 'done';
+        track.progress = 100;
+        track.speed = undefined;
+        track.eta = undefined;
+        track.error = undefined;
+        continue;
+      }
+
       if (track.filePath && fs.existsSync(track.filePath)) {
         try { fs.unlinkSync(track.filePath); } catch { /* ignore */ }
       }
-    }
 
-    for (const track of item.tracks) {
       track.status = 'queued';
       track.progress = 0;
       track.speed = undefined;
       track.eta = undefined;
       track.error = undefined;
       track.filePath = undefined;
+      queuedTracks++;
     }
 
-    item.status = 'queued';
-    item.progress = 0;
-    item.completedTracks = 0;
+    item.totalTracks = item.tracks.length;
+    item.completedTracks = item.tracks.filter((track) => track.status === 'done').length;
     item.failedTracks = 0;
-    item.completedAt = undefined;
-
-    this.abortControllers.set(id, new AbortController());
+    item.progress =
+      item.totalTracks > 0
+        ? Math.round((item.completedTracks / item.totalTracks) * 100)
+        : 0;
+    item.speed = undefined;
+    item.status = queuedTracks > 0 ? 'queued' : 'done';
+    item.completedAt = queuedTracks > 0 ? undefined : item.completedAt;
 
     this.emit('download:updated', { ...item, tracks: item.tracks.map((t) => ({ ...t })) });
 
     for (const track of item.tracks) {
-      this.pendingTracks.push({ downloadId: id, track });
+      if (track.status === 'queued') {
+        this.pendingTracks.push({ downloadId: id, track });
+      }
     }
-    this.drain();
+    if (queuedTracks > 0) this.drain();
 
     savePlaylist(item);
   }

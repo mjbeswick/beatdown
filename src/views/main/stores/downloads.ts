@@ -1,6 +1,7 @@
 import { createStore, createEvent, createEffect, combine } from 'effector';
 import { rpc } from '../rpc';
 import { navChanged } from './nav';
+import { $appSettings } from './appSettings';
 import type { DownloadItem, AddDownloadParams, SpotifyContent } from '../../../shared/types';
 
 export type FilterType = 'all' | 'active' | 'done' | 'error';
@@ -46,7 +47,15 @@ export const removeDownloadFx = createEffect((id: string) => {
   return rpc.proxy.request['download:remove']({ id });
 });
 
-export const removeTrackFx = createEffect(({ downloadId, trackId }: { downloadId: string; trackId: string }) => {
+export const removeTrackFx = createEffect(async ({ downloadId, trackId }: { downloadId: string; trackId: string }) => {
+  if ($appSettings.getState().confirmTrackDeletion) {
+    const item = $downloads.getState().find((download) => download.id === downloadId);
+    const track = item?.tracks.find((entry) => entry.id === trackId);
+    const label = track ? `"${track.title}" by ${track.artist}` : 'this track';
+    const confirmed = window.confirm(`Remove ${label} from your library?`);
+    if (!confirmed) return;
+  }
+
   return rpc.proxy.request['track:remove']({ downloadId, trackId });
 });
 
@@ -142,12 +151,7 @@ export const $showResumeBanner = createStore(false)
 // Show the banner the first time loadAllFx resolves with incomplete downloads.
 loadAllFx.doneData.watch((downloads) => {
   if (!downloads) return;
-  const hasIncomplete = downloads.some(
-    (d) =>
-      (d.status === 'queued' || d.status === 'active') &&
-      d.tracks.some((t) => t.status === 'queued')
-  );
-  if (hasIncomplete) resumeBannerShown();
+  if (downloads.some((d) => d.interrupted)) resumeBannerShown();
 });
 
 // ── Close-confirmation state ──────────────────────────────────────────────────

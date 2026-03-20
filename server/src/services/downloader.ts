@@ -18,6 +18,10 @@ export interface DownloadProgress {
 
 export type ProgressCallback = (progress: DownloadProgress) => void;
 
+export function getExpectedAudioExtension(format: AudioFormat): string {
+  return `.${format === 'aac' ? 'm4a' : format}`;
+}
+
 export async function checkDependencies(): Promise<{ ytdlp: boolean; ffmpeg: boolean }> {
   const check = async (cmd: string): Promise<boolean> => {
     try {

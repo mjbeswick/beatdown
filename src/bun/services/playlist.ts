@@ -60,6 +60,7 @@ export function savePlaylist(item: DownloadItem): void {
   lines.push(`#EXTREEL-ID:${item.id}`);
   lines.push(`#EXTREEL-URL:${item.url}`);
   lines.push(`#EXTREEL-TYPE:${item.type}`);
+  lines.push(`#EXTREEL-STATUS:${item.status}`);
   lines.push(`#EXTREEL-FORMAT:${item.format}`);
   lines.push(`#EXTREEL-QUALITY:${item.quality}`);
   lines.push(`#EXTREEL-ADDED:${item.addedAt}`);
@@ -139,6 +140,7 @@ function parseM3U(filePath: string): DownloadItem | null {
   let id = '';
   let url = '';
   let type: ContentType = 'playlist';
+  let status: DownloadStatus = 'queued';
   let format: AudioFormat = 'mp3';
   let quality: QualityPreset = 'auto';
   let addedAt = new Date().toISOString();
@@ -160,6 +162,7 @@ function parseM3U(filePath: string): DownloadItem | null {
     if (line.startsWith('#EXTREEL-ID:')) id = line.slice('#EXTREEL-ID:'.length);
     else if (line.startsWith('#EXTREEL-URL:')) url = line.slice('#EXTREEL-URL:'.length);
     else if (line.startsWith('#EXTREEL-TYPE:')) type = line.slice('#EXTREEL-TYPE:'.length) as ContentType;
+    else if (line.startsWith('#EXTREEL-STATUS:')) status = line.slice('#EXTREEL-STATUS:'.length) as DownloadStatus;
     else if (line.startsWith('#EXTREEL-FORMAT:')) format = line.slice('#EXTREEL-FORMAT:'.length) as AudioFormat;
     else if (line.startsWith('#EXTREEL-QUALITY:')) quality = line.slice('#EXTREEL-QUALITY:'.length) as QualityPreset;
     else if (line.startsWith('#EXTREEL-ADDED:')) addedAt = line.slice('#EXTREEL-ADDED:'.length);
@@ -239,8 +242,12 @@ function parseM3U(filePath: string): DownloadItem | null {
   const totalTracks = allTracks.length;
   const progress = totalTracks > 0 ? Math.round((completedTracks / totalTracks) * 100) : 0;
 
-  let status: DownloadStatus = 'queued';
-  if (completedTracks === totalTracks && totalTracks > 0) status = 'done';
+  const resolvedStatus: DownloadStatus =
+    completedTracks === totalTracks && totalTracks > 0
+      ? 'done'
+      : status === 'paused'
+        ? 'paused'
+        : 'queued';
 
   return {
     id,
@@ -249,7 +256,7 @@ function parseM3U(filePath: string): DownloadItem | null {
     type,
     coverArt,
     tracks: allTracks,
-    status,
+    status: resolvedStatus,
     progress,
     totalTracks,
     completedTracks,

@@ -46,16 +46,22 @@ export function getArtistDir(artist: string): string {
 
 const AUDIO_EXTS = ['.mp3', '.m4a', '.flac', '.wav', '.opus', '.ogg', '.aac'];
 
-export function findExistingTrack(artist: string, title: string): string | null {
+export function getExpectedAudioExtension(format: AudioFormat): string {
+  return `.${format === 'aac' ? 'm4a' : format}`;
+}
+
+export function findExistingTrack(artist: string, title: string, format?: AudioFormat): string | null {
   const artistDir = getArtistDir(artist);
   if (!fs.existsSync(artistDir)) return null;
 
   const sanitizedTitle = sanitizeFilename(title).toLowerCase();
+  const expectedExt = format ? getExpectedAudioExtension(format) : null;
   try {
     const files = fs.readdirSync(artistDir);
     for (const file of files) {
       const ext = path.extname(file).toLowerCase();
       if (!AUDIO_EXTS.includes(ext)) continue;
+      if (expectedExt && ext !== expectedExt) continue;
       const baseName = path.basename(file, ext).toLowerCase();
       if (baseName.includes(sanitizedTitle) || sanitizedTitle.includes(baseName)) {
         return path.join(artistDir, file);

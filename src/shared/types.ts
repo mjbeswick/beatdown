@@ -28,6 +28,7 @@ export interface DownloadItem {
   coverArt?: string;
   tracks: TrackInfo[];
   status: DownloadStatus;
+  interrupted?: boolean;
   progress: number;
   totalTracks: number;
   completedTracks: number;

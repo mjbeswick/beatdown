@@ -252,6 +252,10 @@ const rpc = defineElectrobunRPC<ReelRPCSchema, 'bun'>('bun', {
         return { count };
       },
 
+      'app:openExternal': ({ url }) => {
+        return Utils.openExternal(url);
+      },
+
       'app:forceQuit': () => {
         isForceQuitting = true;
         process.exit(0);

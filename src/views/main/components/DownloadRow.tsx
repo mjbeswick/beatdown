@@ -15,7 +15,7 @@ import {
   PauseCircle,
 } from 'lucide-react';
 import { $expandedRows, rowToggled, removeDownloadFx, redownloadFx, pauseDownloadFx, resumeDownloadFx } from '../stores/downloads';
-import { playPlaylist, enqueueTrack } from '../stores/player';
+import { playDownloadPlaylist, playPlaylist, enqueueTrack } from '../stores/player';
 import type { DownloadItem } from '../../../shared/types';
 import TrackRow from './TrackRow';
 import { useContextMenu } from '../hooks/useContextMenu';
@@ -60,6 +60,12 @@ export default function DownloadRow({ item }: Props) {
 
   const playAll = () => {
     if (doneTracks.length === 0) return;
+
+    if (item.type === 'playlist') {
+      playDownloadPlaylist(item);
+      return;
+    }
+
     playPlaylist({
       tracks: doneTracks.map((t) => ({
         track: t,

@@ -43,7 +43,7 @@ const DEFAULT_SETTINGS: VisualizerSettings = {
   presetPreferences: {},
   fps: 60,
   showTrackChangeOverlay: true,
-  trackChangeOverlaySeconds: 4,
+  trackChangeOverlaySeconds: 5,
   changePresetOnTrackChange: false,
 };
 
@@ -105,8 +105,8 @@ function sanitizeSettings(input: Partial<VisualizerSettings> | null | undefined)
       typeof input?.trackChangeOverlaySeconds === 'number'
         ? input.trackChangeOverlaySeconds
         : DEFAULT_SETTINGS.trackChangeOverlaySeconds,
-      2,
-      10
+      0,
+      30
     ),
     changePresetOnTrackChange:
       typeof input?.changePresetOnTrackChange === 'boolean'

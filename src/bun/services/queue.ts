@@ -14,6 +14,7 @@ import {
   downloadTrack,
   findExistingTrack,
   getArtistDir,
+  getExpectedAudioExtension,
   type DownloadProgress,
 } from './downloader';
 import { logger } from '../logger';
@@ -22,6 +23,11 @@ import { savePlaylist, deletePlaylist, loadAllPlaylists } from './playlist';
 const CONCURRENCY = 3;
 const MAX_RETRIES = 2;
 const RETRY_DELAYS_MS = [2000, 8000];
+
+function hasTrackFileForFormat(track: TrackInfo, format: AudioFormat): boolean {
+  if (!track.filePath || !fs.existsSync(track.filePath)) return false;
+  return track.filePath.toLowerCase().endsWith(getExpectedAudioExtension(format));
+}
 
 export class DownloadQueue extends EventEmitter {
   private items = new Map<string, DownloadItem>();
@@ -44,6 +50,7 @@ export class DownloadQueue extends EventEmitter {
     try {
       const loaded = loadAllPlaylists();
       for (const item of loaded) {
+        const wasPaused = item.status === 'paused';
         // Reset any tracks that were mid-download when the process was killed
         for (const track of item.tracks) {
           if (track.status === 'downloading' || track.status === 'converting') {
@@ -53,6 +60,15 @@ export class DownloadQueue extends EventEmitter {
             track.eta = undefined;
           }
         }
+
+        const hasPendingTracks = item.tracks.some((track) => track.status === 'queued');
+        item.interrupted = hasPendingTracks && !wasPaused;
+
+        if (hasPendingTracks) {
+          item.status = 'paused';
+          this.pausedDownloads.add(item.id);
+        }
+
         this.items.set(item.id, item);
       }
       logger.info(`Loaded ${loaded.length} playlist(s) from disk`);
@@ -61,18 +77,15 @@ export class DownloadQueue extends EventEmitter {
     }
   }
 
-  /** Re-queue all tracks with 'queued' status across all items and resume downloading. */
+  /** Resume downloads that were interrupted before the app last exited. */
   resumeInterrupted(): number {
     let count = 0;
     for (const item of this.items.values()) {
-      if (item.status === 'done') continue;
-      const tracksToResume = item.tracks.filter((t) => t.status === 'queued');
-      for (const track of tracksToResume) {
-        this.pendingTracks.push({ downloadId: item.id, track, attempt: 0 });
-        count++;
-      }
+      if (!item.interrupted) continue;
+      count += item.tracks.filter((t) => t.status === 'queued').length;
+      if (!this.pausedDownloads.has(item.id)) this.pausedDownloads.add(item.id);
+      this.resume(item.id);
     }
-    if (count > 0) this.drain();
     return count;
   }
 
@@ -102,6 +115,7 @@ export class DownloadQueue extends EventEmitter {
       coverArt: content.coverArt,
       tracks,
       status: 'queued',
+      interrupted: false,
       progress: 0,
       totalTracks: tracks.length,
       completedTracks: 0,
@@ -150,6 +164,7 @@ export class DownloadQueue extends EventEmitter {
     }
 
     item.status = 'paused';
+    item.interrupted = false;
     this.emit('download:updated', { ...item, tracks: item.tracks.map((t) => ({ ...t })) });
     savePlaylist(item);
   }
@@ -167,6 +182,7 @@ export class DownloadQueue extends EventEmitter {
     }
 
     item.status = 'queued';
+    item.interrupted = false;
     this.emit('download:updated', { ...item, tracks: item.tracks.map((t) => ({ ...t })) });
     savePlaylist(item);
     this.drain();
@@ -221,29 +237,51 @@ export class DownloadQueue extends EventEmitter {
       controller.abort();
       this.abortControllers.delete(id);
     }
+    this.pausedDownloads.delete(id);
     this.pendingTracks = this.pendingTracks.filter((p) => p.downloadId !== id);
 
+    let queuedTracks = 0;
     for (const track of item.tracks) {
+      const hasMatchingFile = hasTrackFileForFormat(track, item.format);
+
+      if (hasMatchingFile) {
+        track.status = 'done';
+        track.progress = 100;
+        track.speed = undefined;
+        track.eta = undefined;
+        track.error = undefined;
+        continue;
+      }
+
       track.status = 'queued';
       track.progress = 0;
       track.speed = undefined;
       track.eta = undefined;
       track.error = undefined;
       track.filePath = undefined;
+      queuedTracks++;
     }
 
-    item.status = 'queued';
-    item.progress = 0;
-    item.completedTracks = 0;
+    item.interrupted = false;
+    item.totalTracks = item.tracks.length;
+    item.completedTracks = item.tracks.filter((track) => track.status === 'done').length;
     item.failedTracks = 0;
-    item.completedAt = undefined;
+    item.progress =
+      item.totalTracks > 0
+        ? Math.round((item.completedTracks / item.totalTracks) * 100)
+        : 0;
+    item.speed = undefined;
+    item.status = queuedTracks > 0 ? 'queued' : 'done';
+    item.completedAt = queuedTracks > 0 ? undefined : item.completedAt;
 
     this.emit('download:updated', { ...item, tracks: item.tracks.map((t) => ({ ...t })) });
 
     for (const track of item.tracks) {
-      this.pendingTracks.push({ downloadId: id, track, attempt: 0 });
+      if (track.status === 'queued') {
+        this.pendingTracks.push({ downloadId: id, track, attempt: 0 });
+      }
     }
-    this.drain();
+    if (queuedTracks > 0) this.drain();
     savePlaylist(item);
   }
 
@@ -259,6 +297,7 @@ export class DownloadQueue extends EventEmitter {
         this.pendingTracks.push({ downloadId: item.id, track, attempt: 0 });
       }
 
+      item.interrupted = false;
       this.recalculate(item);
       savePlaylist(item);
     }
@@ -347,7 +386,7 @@ export class DownloadQueue extends EventEmitter {
     }
 
     // --- Dedup: check if this track already exists in the Library ---
-    const existing = findExistingTrack(track.artist, track.title);
+    const existing = findExistingTrack(track.artist, track.title, item.format);
     if (existing && fs.existsSync(existing)) {
       logger.info(`Dedup hit: "${track.title}" → ${existing}`);
       this.mutateTrack(downloadId, track.id, {

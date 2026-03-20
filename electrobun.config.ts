@@ -8,6 +8,15 @@ const config: ElectrobunConfig = {
     description: 'Spotify music downloader',
   },
   build: {
+    mac: {
+      icons: 'assets/icon.iconset',
+    },
+    win: {
+      icon: 'assets/app-icon.png',
+    },
+    linux: {
+      icon: 'assets/app-icon.png',
+    },
     bun: {
       entrypoint: 'src/bun/index.ts',
     },

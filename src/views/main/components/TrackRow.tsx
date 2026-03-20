@@ -31,9 +31,10 @@ interface Props {
   coverArt?: string;
   albumName?: string;
   allTracks?: Array<{ track: TrackInfo; downloadId: string; coverArt?: string; albumName: string }>;
+  compact?: boolean;
 }
 
-export default function TrackRow({ track, downloadId, coverArt, albumName = '', allTracks }: Props) {
+export default function TrackRow({ track, downloadId, coverArt, albumName = '', allTracks, compact }: Props) {
   const isActive = track.status === 'downloading' || track.status === 'converting';
   const isDone = track.status === 'done';
   const { pos, open, close } = useContextMenu();
@@ -47,7 +48,7 @@ export default function TrackRow({ track, downloadId, coverArt, albumName = '', 
     albumName: albumName ?? '',
   });
 
-  const handleClick = () => {
+  const handleDoubleClick = () => {
     if (!isDone || !downloadId) return;
     if (allTracks && allTracks.length > 0) {
       const doneTracks = allTracks.filter((t) => t.track.status === 'done');
@@ -62,10 +63,10 @@ export default function TrackRow({ track, downloadId, coverArt, albumName = '', 
 
   return (
     <div
-      className={`flex items-center gap-2 pl-14 pr-3 py-1.5 border-b border-zinc-700/30 last:border-0 group relative ${
+      className={`flex items-center gap-2 ${compact ? 'pl-3' : 'pl-14'} pr-3 py-1.5 border-b border-zinc-700/30 last:border-0 group relative ${
         isDone ? 'cursor-pointer hover:bg-zinc-800/40' : ''
       } ${isNowPlaying ? 'bg-emerald-900/10' : ''}`}
-      onClick={handleClick}
+      onDoubleClick={handleDoubleClick}
       onContextMenu={downloadId ? open : undefined}
     >
       {/* Now-playing indicator */}
@@ -125,7 +126,7 @@ export default function TrackRow({ track, downloadId, coverArt, albumName = '', 
             ...(isDone ? [
               { label: 'Play', icon: <Play size={13} />, onClick: () => playTrack(asPlayingTrack()) },
               { label: 'Play Next', icon: <Play size={13} />, onClick: () => playNext(asPlayingTrack()) },
-              { label: 'Add to Queue', onClick: () => enqueueTrack(asPlayingTrack()) },
+              { label: 'Enqueue', onClick: () => enqueueTrack(asPlayingTrack()) },
               { separator: true as const },
               { label: 'Go to Artist', onClick: () => navToArtist(track.artist) },
               { separator: true as const },

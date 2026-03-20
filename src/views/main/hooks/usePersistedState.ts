@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState, type Dispatch, type SetStateAction } from 'react';
 
-export function usePersistedState<T>(key: string, defaultValue: T): [T, (value: T) => void] {
+export function usePersistedState<T>(key: string, defaultValue: T): [T, Dispatch<SetStateAction<T>>] {
   const [state, setState] = useState<T>(() => {
     try {
       const stored = localStorage.getItem(key);
@@ -10,12 +10,11 @@ export function usePersistedState<T>(key: string, defaultValue: T): [T, (value: 
     }
   });
 
-  const setPersisted = (value: T) => {
-    setState(value);
+  useEffect(() => {
     try {
-      localStorage.setItem(key, JSON.stringify(value));
+      localStorage.setItem(key, JSON.stringify(state));
     } catch {}
-  };
+  }, [key, state]);
 
-  return [state, setPersisted];
+  return [state, setState];
 }

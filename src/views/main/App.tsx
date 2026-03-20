@@ -67,6 +67,9 @@ export default function App() {
         case 'KeyN':
           next();
           break;
+        case 'KeyP':
+          prev();
+          break;
         case 'KeyM':
           setVolume(player.volume > 0 ? 0 : 0.8);
           break;

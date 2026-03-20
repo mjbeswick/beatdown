@@ -38,6 +38,7 @@ export interface ReelRPCSchema {
       'stream:getPort': { params: undefined; response: number };
       'lyrics:get': { params: { artist: string; title: string }; response: LyricLine[] | null };
       'window:zoom': { params: undefined; response: void };
+      'app:openExternal': { params: { url: string }; response: boolean };
       'app:forceQuit': { params: undefined; response: void };
       'app:cancelClose': { params: undefined; response: void };
       'paths:get': { params: undefined; response: ReelPaths };

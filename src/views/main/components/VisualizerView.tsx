@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { useUnit } from 'effector-react';
 import {
   AudioWaveform,
@@ -128,8 +128,10 @@ export default function VisualizerView() {
     // Keep the canvas pixel buffer in sync with its display size so butterchurn's
     // drawImage call fills the entire output rather than being clipped to the
     // default 300×150 buffer (which then gets stretched / zoomed by CSS).
-    canvas.width = w;
-    canvas.height = h;
+    // Only assign if the value changed — reassigning the same size on a canvas
+    // with an active WebGL context triggers a context loss in WebKit.
+    if (canvas.width !== w) canvas.width = w;
+    if (canvas.height !== h) canvas.height = h;
 
     const renderOptions = getVisualizerRenderOptions(
       {
@@ -170,6 +172,14 @@ export default function VisualizerView() {
   const hideOverlay = () => {
     clearTimeout(overlayTimerRef.current);
     setShowOverlay(false);
+  };
+
+  const scheduleTrackOverlayHide = (seconds: number) => {
+    clearTimeout(trackOverlayTimerRef.current);
+    if (seconds <= 0) return;
+    trackOverlayTimerRef.current = setTimeout(() => {
+      setShowTrackOverlay(false);
+    }, seconds * 1000);
   };
 
   const scheduleAutoCycle = () => {
@@ -232,6 +242,15 @@ export default function VisualizerView() {
     }
   };
 
+  const handleVisualizerDoubleClick = (event: MouseEvent<HTMLDivElement>) => {
+    const target = event.target;
+    if (target instanceof Element && target.closest('[data-visualizer-controls]')) {
+      return;
+    }
+
+    toggleFullscreen();
+  };
+
   const handleToggleFavorite = () => {
     if (!currentPresetName) return;
     const nextPreference =
@@ -285,14 +304,9 @@ export default function VisualizerView() {
     if (!isNewTrack) return;
 
     if (showTrackChangeOverlayRef.current) {
-      clearTimeout(trackOverlayTimerRef.current);
       setShowTrackOverlay(true);
-      trackOverlayTimerRef.current = setTimeout(() => {
-        setShowTrackOverlay(false);
-      }, trackChangeOverlaySecondsRef.current * 1000);
-    }
+      scheduleTrackOverlayHide(trackChangeOverlaySecondsRef.current);
 
-    if (changePresetOnTrackChangeRef.current && vizRef.current && presetNamesRef.current.length > 0) {
       const activePresetName = presetNamesRef.current[presetIdxRef.current] ?? presetNameRef.current;
       const nextPresetName = getNextAutoCyclePresetName(
         presetNamesRef.current,
@@ -314,6 +328,30 @@ export default function VisualizerView() {
     revealOverlay();
     return () => clearTimeout(overlayTimerRef.current);
   }, []);
+
+  // Show track info immediately when switching to "always" mode while a track is playing
+  useEffect(() => {
+    if (!visualizerSettings.showTrackChangeOverlay || !player.current) {
+      clearTimeout(trackOverlayTimerRef.current);
+      setShowTrackOverlay(false);
+      return;
+    }
+
+    if (visualizerSettings.trackChangeOverlaySeconds === 0) {
+      clearTimeout(trackOverlayTimerRef.current);
+      setShowTrackOverlay(true);
+      return;
+    }
+
+    if (showTrackOverlay) {
+      scheduleTrackOverlayHide(visualizerSettings.trackChangeOverlaySeconds);
+    }
+  }, [
+    player.current?.track.id,
+    showTrackOverlay,
+    visualizerSettings.showTrackChangeOverlay,
+    visualizerSettings.trackChangeOverlaySeconds,
+  ]);
 
   useEffect(() => {
     let cancelled = false;
@@ -412,10 +450,16 @@ export default function VisualizerView() {
     resizeObserverRef.current?.disconnect();
 
     const canvas = canvasRef.current;
+    const w = canvas.offsetWidth || 800;
+    const h = canvas.offsetHeight || 600;
+    // Pre-size the canvas before butterchurn creates its WebGL context so the
+    // ResizeObserver's initial callback won't trigger a context-losing resize.
+    if (canvas.width !== w) canvas.width = w;
+    if (canvas.height !== h) canvas.height = h;
     const renderOptions = getVisualizerRenderOptions(
       { quality: qualityRef.current, fxaa: fxaaRef.current, meshDensity: meshDensityRef.current },
-      canvas.offsetWidth || 800,
-      canvas.offsetHeight || 600
+      w,
+      h
     );
 
     vizRef.current = butterchurn.createVisualizer(audioCtx, canvas, renderOptions);
@@ -428,7 +472,12 @@ export default function VisualizerView() {
       const targetFps = fpsRef.current;
       const minInterval = targetFps > 0 ? 1000 / targetFps : 0;
       if (targetFps === 0 || now - lastFrameTime >= minInterval) {
-        if (vizRef.current) vizRef.current.render();
+        try {
+          if (vizRef.current) vizRef.current.render();
+        } catch (err) {
+          console.error('[visualizer] render() threw — stopping loop:', err);
+          return;
+        }
         lastFrameTime = now;
       }
       rafRef.current = requestAnimationFrame(render);
@@ -472,14 +521,20 @@ export default function VisualizerView() {
         setPresetNames(presetIds);
 
         const canvas = canvasRef.current;
+        const w = canvas.offsetWidth || 800;
+        const h = canvas.offsetHeight || 600;
+        // Pre-size the canvas before butterchurn creates its WebGL context so the
+        // ResizeObserver's initial callback won't trigger a context-losing resize.
+        if (canvas.width !== w) canvas.width = w;
+        if (canvas.height !== h) canvas.height = h;
         const renderOptions = getVisualizerRenderOptions(
           {
             quality: qualityRef.current,
             fxaa: fxaaRef.current,
             meshDensity: meshDensityRef.current,
           },
-          canvas.offsetWidth || 800,
-          canvas.offsetHeight || 600
+          w,
+          h
         );
 
         vizRef.current = butterchurn.createVisualizer(audioCtx, canvas, renderOptions);
@@ -504,7 +559,12 @@ export default function VisualizerView() {
           const targetFps = fpsRef.current;
           const minInterval = targetFps > 0 ? 1000 / targetFps : 0;
           if (targetFps === 0 || now - lastFrameTime >= minInterval) {
-            if (vizRef.current) vizRef.current.render();
+            try {
+              if (vizRef.current) vizRef.current.render();
+            } catch (err) {
+              console.error('[visualizer] render() threw — stopping loop:', err);
+              return;
+            }
             lastFrameTime = now;
           }
           rafRef.current = requestAnimationFrame(render);
@@ -550,6 +610,7 @@ export default function VisualizerView() {
       className="flex-1 relative overflow-hidden bg-black"
       onPointerMove={revealOverlay}
       onPointerDown={revealOverlay}
+      onDoubleClick={handleVisualizerDoubleClick}
       onFocusCapture={revealOverlay}
       onPointerLeave={hideOverlay}
     >
@@ -567,33 +628,89 @@ export default function VisualizerView() {
       )}
 
       {/* Track-change info overlay */}
-      {player.current && (
-        <div
-          className={`absolute top-6 left-6 flex items-center gap-3 rounded-xl px-4 py-3 shadow-2xl pointer-events-none transition-all duration-500 ${
-            showTrackOverlay ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2'
-          }`}
-          style={{ background: 'rgba(10,10,12,0.82)', border: '1px solid rgba(255,255,255,0.10)', backdropFilter: 'blur(12px)', maxWidth: '320px' }}
-        >
-          {player.current.coverArt && (
-            <img
-              src={player.current.coverArt}
-              alt="cover"
-              className="w-12 h-12 rounded-lg object-cover flex-shrink-0"
-              style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.5)' }}
-            />
-          )}
-          <div className="min-w-0">
-            <p className="text-white text-sm font-semibold truncate leading-tight">{player.current.track.title}</p>
-            <p className="text-white/60 text-xs truncate mt-0.5">{player.current.track.artist}</p>
-            {player.current.albumName && (
-              <p className="text-white/40 text-xs truncate mt-0.5">{player.current.albumName}</p>
+      {player.current && (() => {
+        const alwaysShowTrackInfo = visualizerSettings.showTrackChangeOverlay && visualizerSettings.trackChangeOverlaySeconds === 0;
+        const shouldShowTrackInfo = alwaysShowTrackInfo || showTrackOverlay || showOverlay;
+        return (
+          <div
+            className={`absolute flex items-center pointer-events-none transition-opacity duration-700 ease-out ${
+              shouldShowTrackInfo ? 'opacity-100' : 'opacity-0'
+            }`}
+            style={{
+              top: 'clamp(0.75rem, 2.2vmin, 1.75rem)',
+              left: 'clamp(0.75rem, 2.2vmin, 1.75rem)',
+              gap: 'clamp(0.75rem, 1.8vmin, 1.25rem)',
+              padding: 'clamp(0.85rem, 2vmin, 1.35rem)',
+              borderRadius: 'clamp(1rem, 2.6vmin, 1.5rem)',
+              background: 'rgba(8,8,10,0.46)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              backdropFilter: 'blur(18px)',
+              maxWidth: 'min(42rem, calc(100vw - clamp(1.5rem, 6vw, 4rem)))',
+              boxShadow: '0 10px 28px rgba(0,0,0,0.26)',
+              willChange: 'opacity',
+            }}
+          >
+            {player.current.coverArt && (
+              <img
+                src={player.current.coverArt}
+                alt="cover"
+                className="object-cover flex-shrink-0"
+                style={{
+                  width: 'clamp(3.5rem, 10vmin, 6.5rem)',
+                  height: 'clamp(3.5rem, 10vmin, 6.5rem)',
+                  borderRadius: 'clamp(0.8rem, 1.8vmin, 1.1rem)',
+                  boxShadow: '0 6px 18px rgba(0,0,0,0.34)',
+                }}
+              />
             )}
+            <div className="min-w-0">
+              <div
+                className="flex items-center mb-1.5"
+                style={{ gap: 'clamp(0.3rem, 0.8vmin, 0.45rem)' }}
+              >
+                <span
+                  className="rounded-full bg-violet-400 animate-pulse flex-shrink-0"
+                  style={{ width: 'clamp(0.35rem, 0.8vmin, 0.5rem)', height: 'clamp(0.35rem, 0.8vmin, 0.5rem)' }}
+                />
+                <span
+                  className="text-white/45 uppercase tracking-widest font-semibold"
+                  style={{ fontSize: 'clamp(0.48rem, 0.9vmin, 0.62rem)' }}
+                >
+                  Now Playing
+                </span>
+              </div>
+              <p
+                className="text-white font-bold leading-tight truncate"
+                style={{
+                  fontSize: 'clamp(1rem, 2.7vmin, 1.8rem)',
+                  maxWidth: 'min(26rem, 48vw)',
+                  textShadow: '0 1px 10px rgba(0,0,0,0.55)',
+                }}
+              >
+                {player.current.track.title}
+              </p>
+              <p
+                className="text-white/75 truncate mt-1.5"
+                style={{ fontSize: 'clamp(0.78rem, 1.45vmin, 1rem)' }}
+              >
+                {player.current.track.artist}
+              </p>
+              {player.current.albumName && (
+                <p
+                  className="text-white/45 truncate mt-0.5"
+                  style={{ fontSize: 'clamp(0.68rem, 1.1vmin, 0.85rem)' }}
+                >
+                  {player.current.albumName}
+                </p>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Controls bar — visible on hover */}
       <div
+        data-visualizer-controls
         className={`absolute bottom-0 left-0 right-0 px-3 py-2 flex items-center gap-2 bg-gradient-to-t from-black/70 to-transparent transition-opacity duration-200 ${
           showOverlay ? 'opacity-100' : 'opacity-0 pointer-events-none'
         }`}
@@ -672,7 +789,7 @@ export default function VisualizerView() {
 
       {/* Config panel */}
       {showConfig && showOverlay && (
-        <div className="absolute bottom-12 right-3 rounded-lg p-4 text-xs flex flex-col gap-3 w-56 shadow-xl" style={{background:'rgba(18,18,20,0.96)', border:'1px solid rgba(255,255,255,0.1)', color:'#fff'}}>
+        <div data-visualizer-controls className="absolute bottom-12 right-3 rounded-lg p-4 text-xs flex flex-col gap-3 w-56 shadow-xl" style={{background:'rgba(18,18,20,0.96)', border:'1px solid rgba(255,255,255,0.1)', color:'#fff'}}>
           <p className="font-medium uppercase tracking-wider text-[10px]" style={{color:'rgba(255,255,255,0.6)'}}>Visualizer Settings</p>
 
           <label className="flex items-center justify-between gap-2">
@@ -756,30 +873,38 @@ export default function VisualizerView() {
             <p className="font-medium uppercase tracking-wider text-[10px] mb-2" style={{color:'rgba(255,255,255,0.6)'}}>Track Change</p>
 
             <label className="flex items-center justify-between gap-2 mb-2">
-              <span>Show track info</span>
-              <input
-                type="checkbox"
-                checked={visualizerSettings.showTrackChangeOverlay}
-                onChange={(e) => setVisualizerShowTrackChangeOverlay(e.target.checked)}
-                className="accent-violet-500"
-              />
-            </label>
-
-            <label className="flex flex-col gap-1 mb-2">
-              <span className="flex justify-between">
-                <span style={{opacity: visualizerSettings.showTrackChangeOverlay ? 1 : 0.4}}>Info duration</span>
-                <span style={{color:'rgba(255,255,255,0.5)', opacity: visualizerSettings.showTrackChangeOverlay ? 1 : 0.4}}>{visualizerSettings.trackChangeOverlaySeconds}s</span>
-              </span>
-              <input
-                type="range"
-                min={2}
-                max={10}
-                step={1}
-                value={visualizerSettings.trackChangeOverlaySeconds}
-                disabled={!visualizerSettings.showTrackChangeOverlay}
-                onChange={(e) => setVisualizerTrackChangeOverlaySeconds(Number(e.target.value))}
-                className="accent-violet-500 disabled:opacity-40"
-              />
+              <span>Track info display</span>
+              <select
+                value={
+                  !visualizerSettings.showTrackChangeOverlay
+                    ? 'hidden'
+                    : visualizerSettings.trackChangeOverlaySeconds === 0
+                      ? 'always'
+                      : String(visualizerSettings.trackChangeOverlaySeconds)
+                }
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v === 'hidden') {
+                    setVisualizerShowTrackChangeOverlay(false);
+                  } else if (v === 'always') {
+                    setVisualizerShowTrackChangeOverlay(true);
+                    setVisualizerTrackChangeOverlaySeconds(0);
+                  } else {
+                    setVisualizerShowTrackChangeOverlay(true);
+                    setVisualizerTrackChangeOverlaySeconds(Number(v));
+                  }
+                }}
+                style={{background:'rgba(255,255,255,0.1)', color:'#fff', border:'1px solid rgba(255,255,255,0.15)', borderRadius:'4px', padding:'2px 6px', fontSize:'11px'}}
+              >
+                <option value="hidden">Hidden</option>
+                <option value="5">5s</option>
+                <option value="10">10s</option>
+                <option value="15">15s</option>
+                <option value="20">20s</option>
+                <option value="25">25s</option>
+                <option value="30">30s</option>
+                <option value="always">Always</option>
+              </select>
             </label>
 
             <label className="flex items-center justify-between gap-2">

@@ -21,10 +21,10 @@ export default function Sidebar() {
   return (
     <aside className="w-52 bg-zinc-800/50 border-r border-zinc-700/60 shrink-0 flex flex-col select-none">
       {/* Now Playing */}
-      <div className="pt-3 pb-1">
+      <div className="py-1 px-2">
         <button
           onClick={() => navChanged('nowplaying')}
-          className={`w-full flex items-center gap-2.5 px-4 py-1.5 text-sm rounded-md transition-colors ${`
+          className={`w-full flex items-center gap-2.5 px-2 py-1.5 text-sm rounded-md transition-colors ${
             nav === 'nowplaying'
               ? 'bg-zinc-700/70 text-zinc-100 font-medium'
               : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700/30'
@@ -43,18 +43,18 @@ export default function Sidebar() {
       </div>
 
       {/* Divider */}
-      <div className="mx-4 border-t border-zinc-700/60" />
+      <div className="mx-4 border-zinc-700/60" />
 
       {/* Library section */}
-      <div className="flex-1 pt-3 pb-1 overflow-y-auto">
-        <p className="px-4 mb-1 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
+      <div className="flex-1 py-1 px-2 overflow-y-auto">
+        <p className="px-2 mb-1 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
           Library
         </p>
         {LIBRARY_NAV.map(({ key, label, Icon }) => (
           <button
             key={key}
             onClick={() => navChanged(key)}
-            className={`w-full flex items-center gap-2.5 px-4 py-1.5 text-sm rounded-md transition-colors ${
+            className={`w-full flex items-center gap-2.5 px-2 py-1.5 text-sm rounded-md transition-colors ${
               nav === key
                 ? 'bg-zinc-700/70 text-zinc-100 font-medium'
                 : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700/30'
@@ -67,10 +67,10 @@ export default function Sidebar() {
       </div>
 
       {/* Bottom: Settings */}
-      <div className="border-t border-zinc-700/60 py-1">
+      <div className="border-zinc-700/60 py-1 px-2">
         <button
           onClick={() => navChanged('settings')}
-          className={`w-full flex items-center gap-2.5 px-4 py-1.5 text-sm rounded-md transition-colors ${
+          className={`w-full flex items-center gap-2.5 px-2 py-1.5 text-sm rounded-md transition-colors ${
             nav === 'settings'
               ? 'bg-zinc-700/70 text-zinc-100 font-medium'
               : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700/30'

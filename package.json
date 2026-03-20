@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
+    "generate:icons": "./scripts/generate-icons.sh",
     "build:css": "bun scripts/build-css.ts",
     "dev": "bun run build:css && node node_modules/.bin/electrobun dev",
     "dev:css": "bun scripts/build-css.ts --watch",

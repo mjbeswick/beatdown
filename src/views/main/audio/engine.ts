@@ -1,22 +1,42 @@
 import {
   $player,
   pause,
-  resume,
   seek,
-  setVolume,
   timeUpdated,
   trackEnded,
   getStreamUrl,
 } from '../stores/player';
+import { $cast } from '../stores/cast';
 
 // ── Web Audio API setup ────────────────────────────────────────────────────────
 
 let audioCtx: AudioContext | null = null;
 let analyserNode: AnalyserNode | null = null;
 let sourceNode: MediaElementAudioSourceNode | null = null;
+let gainNode: GainNode | null = null;
 const audio = new Audio();
 audio.crossOrigin = 'anonymous';
 audio.preload = 'auto';
+
+function clampVolume(volume: number): number {
+  return Math.max(0, Math.min(1, volume));
+}
+
+function applyVolume(volume: number): void {
+  const clamped = clampVolume(volume);
+
+  if (sourceNode && gainNode) {
+    audio.volume = 1;
+    gainNode.gain.value = clamped;
+    return;
+  }
+
+  audio.volume = clamped;
+}
+
+function syncOutputVolume(volume: number = $player.getState().volume): void {
+  applyVolume($cast.getState().isCasting ? 0 : volume);
+}
 
 function getOrCreateCtx(): AudioContext {
   if (!audioCtx) {
@@ -24,6 +44,7 @@ function getOrCreateCtx(): AudioContext {
     analyserNode = audioCtx.createAnalyser();
     analyserNode.fftSize = 2048;
     analyserNode.smoothingTimeConstant = 0.8;
+    gainNode = audioCtx.createGain();
     try {
       sourceNode = audioCtx.createMediaElementSource(audio);
       sourceNode.connect(analyserNode);
@@ -33,7 +54,9 @@ function getOrCreateCtx(): AudioContext {
       // won't receive a signal but playback is unaffected.
       console.warn('Web Audio API source connection failed (CORS):', e);
     }
-    analyserNode.connect(audioCtx.destination);
+    analyserNode.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+    syncOutputVolume();
   }
   return audioCtx;
 }
@@ -75,12 +98,36 @@ audio.addEventListener('error', () => {
 
 let lastTrackId: string | null = null;
 let lastSrc: string | null = null;
+let pendingInitialSeekTime: number | null = null;
+
+function applyPendingInitialSeek(): void {
+  if (pendingInitialSeekTime === null || !isFinite(pendingInitialSeekTime)) return;
+
+  const targetTime = pendingInitialSeekTime;
+  pendingInitialSeekTime = null;
+
+  if (targetTime <= 0) return;
+
+  const maxTime = Number.isFinite(audio.duration) && audio.duration > 0
+    ? Math.max(0, audio.duration - 0.25)
+    : targetTime;
+
+  audio.currentTime = Math.min(targetTime, maxTime);
+}
+
+audio.addEventListener('loadedmetadata', () => {
+  applyPendingInitialSeek();
+});
+
+audio.addEventListener('canplay', () => {
+  applyPendingInitialSeek();
+});
 
 $player.watch((state) => {
   const { current, isPlaying, volume, currentTime: seekTime, streamPort } = state;
 
   // Volume
-  audio.volume = Math.max(0, Math.min(1, volume));
+  syncOutputVolume(volume);
 
   if (!current?.track.filePath || !streamPort) {
     if (!isPlaying) audio.pause();
@@ -94,6 +141,7 @@ $player.watch((state) => {
   if (trackId !== lastTrackId || src !== lastSrc) {
     lastTrackId = trackId;
     lastSrc = src;
+    pendingInitialSeekTime = seekTime > 0 ? seekTime : null;
     audio.src = src;
     audio.load();
     if (isPlaying) {
@@ -112,6 +160,10 @@ $player.watch((state) => {
   } else if (!isPlaying && !audio.paused) {
     audio.pause();
   }
+});
+
+$cast.watch(() => {
+  syncOutputVolume();
 });
 
 // ── Public seek / volume ───────────────────────────────────────────────────────

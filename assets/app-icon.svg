@@ -1,0 +1,38 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <title>Reel app icon</title>
+  <defs>
+    <linearGradient id="bg" x1="192" y1="128" x2="848" y2="896" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1C4A63"/>
+      <stop offset="0.5" stop-color="#173246"/>
+      <stop offset="1" stop-color="#0C1521"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(304 232) rotate(31.8) scale(760 588)">
+      <stop offset="0" stop-color="#89E6EA" stop-opacity="0.42"/>
+      <stop offset="1" stop-color="#89E6EA" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="disc" x1="220" y1="280" x2="704" y2="836" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFF9F1"/>
+      <stop offset="1" stop-color="#E4D5C2"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="604" y1="188" x2="872" y2="428" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFD58D"/>
+      <stop offset="0.55" stop-color="#F7A24D"/>
+      <stop offset="1" stop-color="#E56A3B"/>
+    </linearGradient>
+  </defs>
+  <rect x="96" y="96" width="832" height="832" rx="216" fill="url(#bg)"/>
+  <rect x="96" y="96" width="832" height="832" rx="216" fill="url(#glow)"/>
+  <path d="M681.63 194.004C746.478 194.004 807.266 214.626 857.092 250.861C880.72 268.052 885.453 301.233 867.742 324.474L795.368 419.425C778.086 442.09 745.919 448.292 720.798 434.362C685.59 414.843 646.608 402.491 605.89 397.903L621.487 208.658C641.198 211.173 661.329 194.004 681.63 194.004Z" fill="url(#accent)"/>
+  <circle cx="438" cy="566" r="286" fill="url(#disc)"/>
+  <circle cx="438" cy="566" r="286" stroke="#FFF8EE" stroke-opacity="0.32" stroke-width="20"/>
+  <circle cx="306" cy="430" r="54" fill="#17374C"/>
+  <circle cx="526" cy="396" r="50" fill="#17374C"/>
+  <circle cx="590" cy="612" r="58" fill="#17374C"/>
+  <circle cx="344" cy="680" r="46" fill="#17374C"/>
+  <circle cx="438" cy="566" r="126" fill="#111E2F"/>
+  <circle cx="438" cy="566" r="126" stroke="#F7A553" stroke-width="26"/>
+  <path d="M401 497.338C401 480.412 419.31 469.858 433.939 478.395L556.649 549.999C571.124 558.446 571.124 579.354 556.649 587.801L433.939 659.405C419.31 667.942 401 657.388 401 640.462V497.338Z" fill="#F6B46A"/>
+  <path d="M714 730C773.563 704.545 820.036 657.254 846.814 598.609" stroke="#F29E5A" stroke-width="34" stroke-linecap="round"/>
+  <path d="M216 792C262.867 820.477 316.519 837.515 372.5 841.584" stroke="#89E6EA" stroke-opacity="0.7" stroke-width="18" stroke-linecap="round"/>
+  <path d="M714 730L840 716L790 831" stroke="#F7A24D" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
