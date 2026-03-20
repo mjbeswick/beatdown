@@ -35,7 +35,8 @@ import WaveformSeeker from './WaveformSeeker';
 // Ensure audio engine is initialized
 import '../audio/engine';
 
-const BASE_PLAYER_PANEL_HEIGHT = 64;
+const BASE_PLAYER_PANEL_CONTENT_HEIGHT = 58;
+const PLAYER_PANEL_VERTICAL_PADDING = 12;
 const DEFAULT_WAVEFORM_HEIGHT = 18;
 
 interface Props {
@@ -111,12 +112,13 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
     appSettings.playerSeekerStyle === 'waveform'
       ? Math.max(0, appSettings.waveformHeight - DEFAULT_WAVEFORM_HEIGHT)
       : 0;
-  const playerPanelHeight = BASE_PLAYER_PANEL_HEIGHT + waveformHeightOffset;
+  const playerPanelHeight =
+    BASE_PLAYER_PANEL_CONTENT_HEIGHT + PLAYER_PANEL_VERTICAL_PADDING * 2 + waveformHeightOffset;
 
   return (
     <div
       className="shrink-0 bg-zinc-800/70 border-t border-zinc-700/60 flex items-center gap-4 px-4 z-10"
-      style={{ height: playerPanelHeight }}
+      style={{ height: playerPanelHeight, paddingBlock: PLAYER_PANEL_VERTICAL_PADDING }}
     >
       {/* Track info */}
       <div className="flex items-center gap-2.5 w-52 shrink-0 min-w-0">
@@ -164,8 +166,8 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
       </div>
 
       {/* Controls + seeker */}
-      <div className="flex-1 flex flex-col items-center gap-2">
-        <div className="flex items-center gap-4">
+      <div className="flex min-w-0 flex-1 flex-col gap-2">
+        <div className="flex items-center justify-center gap-4">
           <button
             onClick={() => toggleShuffle()}
             className={`transition-colors ${
@@ -216,7 +218,7 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
         </div>
 
         {/* Seeker */}
-        <div className="flex items-center gap-3 w-full max-w-md">
+        <div className="flex w-full max-w-[clamp(34rem,74vw,80rem)] items-center gap-3 self-center">
           <span className="text-zinc-600 text-[10px] tabular-nums font-mono w-8 text-right shrink-0">
             {elapsed}
           </span>

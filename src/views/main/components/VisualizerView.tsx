@@ -40,6 +40,9 @@ import {
 } from '../lib/visualizer';
 
 const OVERLAY_IDLE_MS = 2200;
+const MAX_PRESET_HISTORY = 100;
+
+type PresetHistoryMode = 'none' | 'reset' | 'push' | 'back' | 'forward';
 
 export default function VisualizerView() {
   const [player, visualizerSettings] = useUnit([$player, $visualizerSettings]);
@@ -50,6 +53,8 @@ export default function VisualizerView() {
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const presetNamesRef = useRef<string[]>([]);
   const presetIdxRef = useRef(0);
+  const presetHistoryRef = useRef<string[]>([]);
+  const presetHistoryIdxRef = useRef(-1);
   const presetLoadSeqRef = useRef(0);
   const presetTimerRef = useRef<ReturnType<typeof setTimeout>>();
   const overlayTimerRef = useRef<ReturnType<typeof setTimeout>>();
@@ -90,7 +95,57 @@ export default function VisualizerView() {
     ? getVisualizerPresetPreference(visualizerSettings, currentPresetName)
     : 'default';
 
-  const doLoadPreset = async (idx: number, persist = true) => {
+  const commitPresetHistory = (presetName: string, mode: PresetHistoryMode) => {
+    if (!presetName || mode === 'none') return;
+
+    if (mode === 'reset') {
+      presetHistoryRef.current = [presetName];
+      presetHistoryIdxRef.current = 0;
+      return;
+    }
+
+    if (mode === 'push') {
+      const nextHistory = presetHistoryRef.current.slice(0, presetHistoryIdxRef.current + 1);
+      const currentHistoryPresetName =
+        presetHistoryIdxRef.current >= 0 ? nextHistory[presetHistoryIdxRef.current] : null;
+      if (currentHistoryPresetName === presetName) return;
+
+      nextHistory.push(presetName);
+      if (nextHistory.length > MAX_PRESET_HISTORY) nextHistory.shift();
+
+      presetHistoryRef.current = nextHistory;
+      presetHistoryIdxRef.current = nextHistory.length - 1;
+      return;
+    }
+
+    const direction = mode === 'back' ? -1 : 1;
+    const nextHistoryIdx = presetHistoryIdxRef.current + direction;
+    if (presetHistoryRef.current[nextHistoryIdx] === presetName) {
+      presetHistoryIdxRef.current = nextHistoryIdx;
+      return;
+    }
+
+    const nextHistory = presetHistoryRef.current.slice(0, presetHistoryIdxRef.current + 1);
+    if (nextHistory[nextHistory.length - 1] !== presetName) {
+      nextHistory.push(presetName);
+      if (nextHistory.length > MAX_PRESET_HISTORY) nextHistory.shift();
+    }
+
+    presetHistoryRef.current = nextHistory;
+    presetHistoryIdxRef.current = nextHistory.length - 1;
+  };
+
+  const getHistoryPresetName = (direction: -1 | 1): string | null => {
+    const nextHistoryIdx = presetHistoryIdxRef.current + direction;
+    const presetName = presetHistoryRef.current[nextHistoryIdx];
+    return presetName && presetNamesRef.current.includes(presetName) ? presetName : null;
+  };
+
+  const doLoadPreset = async (
+    idx: number,
+    persist = true,
+    historyMode: PresetHistoryMode = 'push'
+  ) => {
     const names = presetNamesRef.current;
     if (!vizRef.current || names.length === 0) return;
 
@@ -110,12 +165,17 @@ export default function VisualizerView() {
 
     presetIdxRef.current = i;
     setCurrentIdx(i);
+    commitPresetHistory(presetName, historyMode);
     if (persist) setVisualizerPresetName(presetName);
   };
 
-  const loadPresetByName = async (presetName: string, persist = true) => {
+  const loadPresetByName = async (
+    presetName: string,
+    persist = true,
+    historyMode: PresetHistoryMode = 'push'
+  ) => {
     const idx = presetNamesRef.current.indexOf(presetName);
-    if (idx !== -1) await doLoadPreset(idx, persist);
+    if (idx !== -1) await doLoadPreset(idx, persist, historyMode);
   };
 
   const applyRendererSettings = () => {
@@ -206,6 +266,13 @@ export default function VisualizerView() {
   };
 
   const handleNext = () => {
+    const nextHistoryPresetName = getHistoryPresetName(1);
+    if (nextHistoryPresetName) {
+      void loadPresetByName(nextHistoryPresetName, true, 'forward');
+      scheduleAutoCycle();
+      return;
+    }
+
     const activePresetName = presetNamesRef.current[presetIdxRef.current] ?? presetNameRef.current;
     const nextPresetName = getAdjacentVisualizerPresetName(
       presetNamesRef.current,
@@ -218,6 +285,13 @@ export default function VisualizerView() {
   };
 
   const handlePrev = () => {
+    const prevHistoryPresetName = getHistoryPresetName(-1);
+    if (prevHistoryPresetName) {
+      void loadPresetByName(prevHistoryPresetName, true, 'back');
+      scheduleAutoCycle();
+      return;
+    }
+
     const activePresetName = presetNamesRef.current[presetIdxRef.current] ?? presetNameRef.current;
     const prevPresetName = getAdjacentVisualizerPresetName(
       presetNamesRef.current,
@@ -366,6 +440,8 @@ export default function VisualizerView() {
 
         if (presetIds.length === 0) {
           presetIdxRef.current = 0;
+          presetHistoryRef.current = [];
+          presetHistoryIdxRef.current = -1;
           setCurrentIdx(0);
           return;
         }
@@ -382,6 +458,8 @@ export default function VisualizerView() {
         if (cancelled) return;
         presetNamesRef.current = [];
         presetIdxRef.current = 0;
+        presetHistoryRef.current = [];
+        presetHistoryIdxRef.current = -1;
         setPresetNames([]);
         setCurrentIdx(0);
       });
@@ -465,7 +543,7 @@ export default function VisualizerView() {
     vizRef.current = butterchurn.createVisualizer(audioCtx, canvas, renderOptions);
     vizRef.current.connectAudio(analyser);
     vizRef.current.setOutputAA(renderOptions.outputFXAA);
-    void doLoadPreset(presetIdxRef.current, false);
+    void doLoadPreset(presetIdxRef.current, false, 'none');
 
     let lastFrameTime = 0;
     const render = (now: number) => {
@@ -547,7 +625,7 @@ export default function VisualizerView() {
               ? requestedPreset
               : presetIds[0];
           const initialIdx = presetIds.indexOf(initialPresetName);
-          await doLoadPreset(initialIdx, requestedPreset !== initialPresetName);
+          await doLoadPreset(initialIdx, requestedPreset !== initialPresetName, 'reset');
         }
 
         if (cancelled || !vizRef.current) return;

@@ -26,9 +26,14 @@ export default function DjSettingsCard({
   return (
     <div className={className}>
       <div className="px-4 pt-3 pb-1">
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500 mb-2">
-          DJ Mixing
-        </p>
+        <div className="mb-2 flex items-center gap-2">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
+            Auto DJing
+          </p>
+          <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.18em] text-amber-300">
+            Beta
+          </span>
+        </div>
       </div>
 
       {/* Mode selector */}

@@ -19,9 +19,9 @@ export default function Sidebar() {
   const isPlaying = !!player.current;
 
   return (
-    <aside className="w-52 bg-zinc-800/50 border-r border-zinc-700/60 shrink-0 flex flex-col select-none">
+    <aside className="w-52 bg-zinc-800/50 border-r border-zinc-700/60 shrink-0 flex flex-col select-none pt-3 pb-4">
       {/* Now Playing */}
-      <div className="py-1 px-2">
+      <div className="px-3">
         <button
           onClick={() => navChanged('nowplaying')}
           className={`w-full flex items-center gap-2.5 px-2 py-1.5 text-sm rounded-md transition-colors ${
@@ -43,10 +43,10 @@ export default function Sidebar() {
       </div>
 
       {/* Divider */}
-      <div className="mx-4 border-zinc-700/60" />
+      <div className="mx-4 mt-3 border-t border-zinc-700/60" />
 
       {/* Library section */}
-      <div className="flex-1 py-1 px-2 overflow-y-auto">
+      <div className="flex-1 px-3 py-3 overflow-y-auto">
         <p className="px-2 mb-1 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
           Library
         </p>
@@ -67,7 +67,7 @@ export default function Sidebar() {
       </div>
 
       {/* Bottom: Settings */}
-      <div className="border-zinc-700/60 py-1 px-2">
+      <div className="px-3 pt-2">
         <button
           onClick={() => navChanged('settings')}
           className={`w-full flex items-center gap-2.5 px-2 py-1.5 text-sm rounded-md transition-colors ${

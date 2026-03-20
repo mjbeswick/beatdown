@@ -41,6 +41,8 @@ export default function NowPlayingView() {
   const [lyrics, setLyrics] = useState<LyricLine[] | null>(null);
   const [lyricsLoading, setLyricsLoading] = useState(false);
   const activeRef = useRef<HTMLDivElement>(null);
+  const activeQueueItemRef = useRef<HTMLDivElement>(null);
+  const lastQueueScrollTrackIdRef = useRef<string | null>(null);
   const configButtonRef = useRef<HTMLButtonElement>(null);
   const configPanelRef = useRef<HTMLDivElement>(null);
   const current = player.current;
@@ -145,11 +147,28 @@ export default function NowPlayingView() {
 
   const activeLine = getActiveLine();
   const isFav = current ? favourites.includes(current.track.id) : false;
-
-  const upcomingQueue = player.queue
+  const normalizedSearch = search.trim().toLowerCase();
+  const visibleQueue = player.queue
     .map((item, queueIdx) => ({ item, queueIdx }))
-    .slice(player.queueIndex + 1)
-    .filter(({ item }) => !search || item.track.title.toLowerCase().includes(search.toLowerCase()));
+    .filter(({ item, queueIdx }) => {
+      if (queueIdx === player.queueIndex) return true;
+      return !normalizedSearch || item.track.title.toLowerCase().includes(normalizedSearch);
+    });
+
+  useLayoutEffect(() => {
+    if (!current || !showSidebar || tab !== 'queue') return;
+
+    const activeQueueItem = activeQueueItemRef.current;
+    if (!activeQueueItem) return;
+
+    const behavior: ScrollBehavior =
+      lastQueueScrollTrackIdRef.current !== null && lastQueueScrollTrackIdRef.current !== current.track.id
+        ? 'smooth'
+        : 'auto';
+
+    activeQueueItem.scrollIntoView({ behavior, block: 'center' });
+    lastQueueScrollTrackIdRef.current = current.track.id;
+  }, [current, normalizedSearch, player.queue.length, player.queueIndex, showSidebar, tab]);
 
   if (!current) {
     return (
@@ -238,7 +257,7 @@ export default function NowPlayingView() {
             }}
           >
             {panelTab === 'queue'
-              ? `Queue${upcomingQueue.length > 0 ? ` · ${upcomingQueue.length}` : ''}`
+              ? `Queue${visibleQueue.length > 0 ? ` · ${visibleQueue.length}` : ''}`
               : 'Lyrics'}
           </button>
         ))}
@@ -246,77 +265,117 @@ export default function NowPlayingView() {
 
       {tab === 'queue' && (
         <div className="flex-1 overflow-y-auto">
-          {upcomingQueue.length === 0 ? (
+          {visibleQueue.length === 0 ? (
             <div className="h-full flex items-center justify-center text-zinc-600" style={{ fontSize: 'clamp(0.8rem, 1.15vmin, 0.95rem)' }}>
               Queue is empty
             </div>
           ) : (
-            upcomingQueue.map(({ item, queueIdx }) => (
-              <div
-                key={`${item.track.id}:${queueIdx}`}
-                className="group flex items-center gap-3 border-b border-zinc-100/5 hover:bg-zinc-100/4 transition-colors"
-                style={{ padding: 'clamp(0.75rem, 1.5vmin, 0.95rem)' }}
-              >
-                <button
-                  onClick={() => jumpToQueueIndex(queueIdx)}
-                  className="shrink-0 w-10 h-10 rounded overflow-hidden bg-zinc-800 hover:ring-1 hover:ring-emerald-400/60 transition-all"
-                  title={`Play ${item.track.title}`}
+            visibleQueue.map(({ item, queueIdx }) => {
+              const isCurrent = queueIdx === player.queueIndex;
+              const isPlayed = queueIdx < player.queueIndex;
+
+              return (
+                <div
+                  key={`${item.track.id}:${queueIdx}`}
+                  ref={isCurrent ? activeQueueItemRef : undefined}
+                  aria-current={isCurrent ? 'true' : undefined}
+                  className={`group flex items-center gap-3 border-b border-zinc-100/5 transition-colors ${
+                    isCurrent ? 'bg-emerald-400/10' : 'hover:bg-zinc-100/4'
+                  } ${isPlayed ? 'opacity-65' : ''}`}
+                  style={{
+                    padding: 'clamp(0.75rem, 1.5vmin, 0.95rem)',
+                    boxShadow: isCurrent ? 'inset 0 0 0 1px rgba(52, 211, 153, 0.18)' : undefined,
+                  }}
                 >
-                  {item.coverArt ? (
-                    <img src={item.coverArt} alt="" className="w-full h-full object-cover" />
+                  <button
+                    onClick={() => {
+                      if (!isCurrent) jumpToQueueIndex(queueIdx);
+                    }}
+                    className={`shrink-0 h-10 w-10 overflow-hidden rounded bg-zinc-800 transition-all ${
+                      isCurrent ? 'ring-1 ring-emerald-400/60' : 'hover:ring-1 hover:ring-emerald-400/60'
+                    }`}
+                    title={isCurrent ? `${item.track.title} is now playing` : `Play ${item.track.title}`}
+                  >
+                    {item.coverArt ? (
+                      <img src={item.coverArt} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center">
+                        <ListMusic size={16} className="text-zinc-600" />
+                      </div>
+                    )}
+                  </button>
+
+                  <div className="min-w-0 flex-1">
+                    <button
+                      onClick={() => {
+                        if (!isCurrent) jumpToQueueIndex(queueIdx);
+                      }}
+                      className={`block w-full truncate text-left transition-colors ${
+                        isCurrent ? 'text-emerald-100' : 'text-zinc-200 hover:text-zinc-100'
+                      }`}
+                      style={{ fontSize: 'clamp(0.8rem, 1.05vmin, 0.95rem)' }}
+                      title={item.track.title}
+                    >
+                      {item.track.title}
+                    </button>
+                    <div className="flex items-center gap-1.5 text-zinc-500" style={{ fontSize: 'clamp(0.72rem, 0.9vmin, 0.82rem)' }}>
+                      <button
+                        onClick={() => navToArtist(item.track.artist)}
+                        className="truncate transition-colors hover:text-zinc-300"
+                        title={item.track.artist}
+                      >
+                        {item.track.artist}
+                      </button>
+                      <span>·</span>
+                      <button
+                        onClick={() => item.downloadId && navToAlbum(item.downloadId)}
+                        className="truncate transition-colors hover:text-zinc-300"
+                        title={item.albumName}
+                      >
+                        {item.albumName}
+                      </button>
+                    </div>
+                  </div>
+
+                  {isCurrent ? (
+                    <div className="flex shrink-0 items-center gap-1.5 text-emerald-200">
+                      <button
+                        onClick={() => pause()}
+                        className="transition-colors hover:text-emerald-100 disabled:cursor-default disabled:text-emerald-200/45"
+                        aria-label="Pause current track"
+                        disabled={!player.isPlaying}
+                      >
+                        <Pause size={14} />
+                      </button>
+                      <button
+                        onClick={() => removeFromQueue(queueIdx)}
+                        className="text-zinc-500 transition-colors hover:text-red-400"
+                        aria-label="Remove current track from queue"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <ListMusic size={16} className="text-zinc-600" />
+                    <div className="flex shrink-0 items-center gap-1.5 opacity-0 transition-opacity group-hover:opacity-100">
+                      <button
+                        onClick={() => jumpToQueueIndex(queueIdx)}
+                        className="text-zinc-500 transition-colors hover:text-emerald-300"
+                        aria-label="Play queued track"
+                      >
+                        <Play size={14} className="fill-current" />
+                      </button>
+                      <button
+                        onClick={() => removeFromQueue(queueIdx)}
+                        className="text-zinc-600 transition-colors hover:text-red-400"
+                        aria-label="Remove from queue"
+                      >
+                        <X size={14} />
+                      </button>
                     </div>
                   )}
-                </button>
-
-                <div className="min-w-0 flex-1">
-                  <button
-                    onClick={() => jumpToQueueIndex(queueIdx)}
-                    className="block w-full text-left truncate text-zinc-200 hover:text-zinc-100 transition-colors"
-                    style={{ fontSize: 'clamp(0.8rem, 1.05vmin, 0.95rem)' }}
-                    title={item.track.title}
-                  >
-                    {item.track.title}
-                  </button>
-                  <div className="flex items-center gap-1.5 text-zinc-500" style={{ fontSize: 'clamp(0.72rem, 0.9vmin, 0.82rem)' }}>
-                    <button
-                      onClick={() => navToArtist(item.track.artist)}
-                      className="truncate hover:text-zinc-300 transition-colors"
-                      title={item.track.artist}
-                    >
-                      {item.track.artist}
-                    </button>
-                    <span>·</span>
-                    <button
-                      onClick={() => item.downloadId && navToAlbum(item.downloadId)}
-                      className="truncate hover:text-zinc-300 transition-colors"
-                      title={item.albumName}
-                    >
-                      {item.albumName}
-                    </button>
-                  </div>
                 </div>
-
-                <div className="flex items-center gap-1.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button
-                    onClick={() => jumpToQueueIndex(queueIdx)}
-                    className="text-zinc-500 hover:text-emerald-300 transition-colors"
-                    aria-label="Play queued track"
-                  >
-                    <Play size={14} className="fill-current" />
-                  </button>
-                  <button
-                    onClick={() => removeFromQueue(queueIdx)}
-                    className="text-zinc-600 hover:text-red-400 transition-colors"
-                    aria-label="Remove from queue"
-                  >
-                    <X size={14} />
-                  </button>
-                </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       )}
@@ -379,9 +438,9 @@ export default function NowPlayingView() {
     <div
       className="relative flex h-full flex-col items-center justify-center min-w-0"
       style={{
-        gap: 'clamp(1.25rem, 3vmin, 2.4rem)',
+        gap: 'clamp(1.1rem, 2.6vmin, 2rem)',
         paddingInline: 'clamp(1rem, 4vmin, 3.25rem)',
-        paddingBlock: 'clamp(1rem, 4vmin, 3rem)',
+        paddingBlock: 'clamp(1.35rem, 4.8vmin, 3.4rem)',
       }}
     >
       <div
@@ -444,7 +503,7 @@ export default function NowPlayingView() {
         className={`aspect-square rounded-2xl overflow-hidden shadow-2xl transition-all duration-500 ${
           player.isPlaying ? 'scale-100 shadow-black/60' : 'scale-[0.93] shadow-black/40 opacity-80'
         }`}
-        style={{ width: 'clamp(12rem, 38vmin, 28rem)' }}
+        style={{ width: 'clamp(15rem, 46vmin, 34rem)' }}
         onContextMenu={openAlbumArtMenu}
         title="Right-click for track actions"
       >
@@ -475,7 +534,7 @@ export default function NowPlayingView() {
         />
       )}
 
-      <div className="w-full text-center space-y-1.5" style={{ maxWidth: 'min(34rem, 64vw)' }}>
+      <div className="w-full text-center space-y-1.5" style={{ maxWidth: 'min(38rem, 70vw)' }}>
         <div className="flex items-center justify-center gap-2">
           <div ref={titleContainerRef} className="overflow-hidden min-w-0">
             <h2

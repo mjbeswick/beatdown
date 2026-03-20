@@ -80,13 +80,16 @@ body {
 
 /* ── Now Playing light-theme tuning ───────────────────────────────────────── */
 .now-playing-view {
-  --now-playing-blur-filter: blur(80px) saturate(1.6) brightness(0.22);
-  --now-playing-overlay: linear-gradient(
-    to right,
-    rgba(0, 0, 0, 0.3) 0%,
-    transparent 50%,
-    rgba(0, 0, 0, 0.5) 100%
-  );
+  --now-playing-blur-filter: blur(72px) saturate(2.15) brightness(0.5) contrast(1.05);
+  --now-playing-overlay:
+    radial-gradient(circle at top center, rgba(16, 185, 129, 0.18) 0%, transparent 34%),
+    radial-gradient(circle at 16% 18%, rgba(255, 255, 255, 0.1) 0%, transparent 28%),
+    linear-gradient(
+      135deg,
+      rgba(24, 24, 27, 0.18) 0%,
+      rgba(24, 24, 27, 0.36) 45%,
+      rgba(9, 9, 11, 0.68) 100%
+    );
   --now-playing-active-lyric-shadow: 0 0 20px rgba(255, 255, 255, 0.2);
 }
 
@@ -99,13 +102,16 @@ body {
 }
 
 .light-theme .now-playing-view {
-  --now-playing-blur-filter: blur(88px) saturate(1.05) brightness(0.78);
-  --now-playing-overlay: linear-gradient(
-    135deg,
-    rgba(255, 255, 255, 0.84) 0%,
-    rgba(255, 255, 255, 0.5) 42%,
-    rgba(244, 244, 245, 0.74) 100%
-  );
+  --now-playing-blur-filter: blur(82px) saturate(1.12) brightness(1.16) contrast(0.96);
+  --now-playing-overlay:
+    radial-gradient(circle at top center, rgba(16, 185, 129, 0.12) 0%, transparent 38%),
+    radial-gradient(circle at 12% 14%, rgba(255, 255, 255, 0.42) 0%, transparent 28%),
+    linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.72) 0%,
+      rgba(255, 255, 255, 0.54) 40%,
+      rgba(244, 244, 245, 0.58) 100%
+    );
   --now-playing-active-lyric-shadow: 0 0 18px rgba(255, 255, 255, 0.72);
 }
 

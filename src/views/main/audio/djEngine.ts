@@ -7,8 +7,16 @@
  * Crossfade uses Web Audio API gain scheduling for sample-accurate ramps.
  * Beatmatch adjusts the incoming deck's playbackRate so its tempo matches the
  * outgoing deck's during the mix, then ramps back to 1× over 4 beats.
+ * Phase alignment ensures the first beat of the incoming track lands on the
+ * outgoing track's next beat boundary.
  *
  * Falls back to plain crossfade when BPM data is unavailable.
+ *
+ * Manual skips (user presses Next) are also crossfaded when the next track is
+ * already preloaded; otherwise the engine falls through to an instant change.
+ *
+ * DJ mixing is disabled when casting (the cast device handles its own playback
+ * and doesn't benefit from a local Web Audio crossfade).
  */
 
 import {
@@ -20,10 +28,12 @@ import {
   ensureDeckBConnected,
   swapDecks,
   setCrossfadeInProgress,
+  registerTrackChangeHook,
 } from './engine';
 import { detectBpm, getCachedBpm } from './bpmDetector';
 import { $player, trackEnded, getStreamUrl } from '../stores/player';
 import { $appSettings } from '../stores/appSettings';
+import { $cast } from '../stores/cast';
 import type { PlayingTrack } from '../stores/player';
 
 type DjState = 'idle' | 'preloading' | 'preloaded' | 'crossfading';
@@ -31,9 +41,19 @@ type DjState = 'idle' | 'preloading' | 'preloaded' | 'crossfading';
 let state: DjState = 'idle';
 let nextTrack: PlayingTrack | null = null;
 let nextTrackSrc: string | null = null;
+// ID of the track that was playing when we began preloading — used to look up
+// the outgoing BPM even after the player has already advanced (manual skip).
+let outgoingTrackId: string | null = null;
 let crossfadeTimer: ReturnType<typeof setTimeout> | null = null;
+// True when the crossfade was initiated by a manual skip; completeCrossfade()
+// skips trackEnded() in that case because the queue already advanced.
+let manualSkip = false;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+function isDjActive(): boolean {
+  return $appSettings.getState().djMode !== 'off' && !$cast.getState().isCasting;
+}
 
 function reset(): void {
   if (crossfadeTimer !== null) {
@@ -41,7 +61,7 @@ function reset(): void {
     crossfadeTimer = null;
   }
 
-  // Cancel in-progress gain ramps and restore deck A to full volume
+  // Cancel in-progress gain ramps and restore active deck to full volume
   const ctx = getAudioContext();
   if (ctx) {
     const t = ctx.currentTime;
@@ -59,6 +79,8 @@ function reset(): void {
   state = 'idle';
   nextTrack = null;
   nextTrackSrc = null;
+  outgoingTrackId = null;
+  manualSkip = false;
   setCrossfadeInProgress(false);
 }
 
@@ -81,22 +103,91 @@ function rampPlaybackRate(
   requestAnimationFrame(step);
 }
 
+/**
+ * Calculate the start position for the incoming track such that its first beat
+ * (played at rate `r = bpm_out / bpm_in`) lands exactly on the outgoing
+ * track's next beat boundary.
+ *
+ * Derivation:
+ *   At rate r, position p_in starts at time 0 and the incoming track's beats
+ *   arrive at playback times t_k = (firstBeatOffset_in + k·beatPeriod_in − p_in) / r.
+ *   We want t_k = timeToNextOutBeat for some k ≥ 0 with t_k ≥ 0, giving:
+ *     p_in = firstBeatOffset_in + k·beatPeriod_in − timeToNextOutBeat·r
+ *   Choose the smallest k ≥ 0 such that p_in ≥ 0.
+ */
+function calcPhaseAlignedStartTime(
+  outgoingTrackIdLocal: string,
+  nextBeatInfo: { bpm: number; firstBeatOffset: number },
+  outgoingCurrentTime: number,
+  r: number,
+): number {
+  const outBeat = getCachedBpm(outgoingTrackIdLocal);
+  if (!outBeat) return nextBeatInfo.firstBeatOffset; // fallback: no phase data
+
+  const outPeriod = 60 / outBeat.bpm;
+  const inPeriod = 60 / nextBeatInfo.bpm;
+
+  // Phase of the outgoing track within its current beat (0 ≤ phase < outPeriod)
+  const phase = ((outgoingCurrentTime - outBeat.firstBeatOffset) % outPeriod + outPeriod) % outPeriod;
+  // Time until the outgoing track's next beat
+  const timeToNextBeat = outPeriod - phase;
+
+  // Ideal start position for the incoming track
+  let p = nextBeatInfo.firstBeatOffset - timeToNextBeat * r;
+
+  // Advance by beat periods until p ≥ 0
+  if (p < 0) {
+    const k = Math.ceil(-p / inPeriod);
+    p += k * inPeriod;
+  }
+
+  return p;
+}
+
+// ── Track-change hook: intercept manual skips ─────────────────────────────────
+//
+// engine.ts calls this before doing an immediate track reload.  If we have the
+// incoming track already preloaded we start the crossfade and return true so
+// engine.ts skips the reload entirely.
+
+registerTrackChangeHook((trackId, _src) => {
+  if (!isDjActive()) return false;
+  if (state !== 'preloaded') return false;
+  if (nextTrack?.track.id !== trackId) return false;
+
+  // The user manually skipped to exactly the track we have preloaded.
+  // Start the crossfade; the store has already advanced so we must NOT call
+  // trackEnded() when the crossfade finishes.
+  manualSkip = true;
+  startCrossfade();
+  return true; // prevent engine.ts from reloading
+});
+
 // ── Main state machine driven by $player ─────────────────────────────────────
 
 $player.watch((player) => {
-  const settings = $appSettings.getState();
-  if (settings.djMode === 'off') {
+  if (!isDjActive()) {
     if (state !== 'idle') reset();
     return;
   }
 
   const { queue, queueIndex, isPlaying, current, streamPort } = player;
 
-  // If the queue changed such that our preloaded "next" track no longer lines
-  // up with what the queue says comes next, abort and start fresh.
-  if (state !== 'idle' && nextTrack) {
-    const expectedNext = queue[queueIndex + 1];
-    if (!expectedNext || expectedNext.track.id !== nextTrack.track.id) {
+  // ── Guard: abort if nav invalidated our preloaded state ───────────────────
+  if (state === 'preloading' || state === 'preloaded') {
+    if (nextTrack) {
+      const expectedNext = queue[queueIndex + 1];
+      if (!expectedNext || expectedNext.track.id !== nextTrack.track.id) {
+        reset();
+      }
+    }
+  }
+
+  // ── Guard: abort an in-progress crossfade if user navigated away ──────────
+  if (state === 'crossfading' && current) {
+    const expectedCurrentId = manualSkip ? nextTrack?.track.id : outgoingTrackId;
+    if (expectedCurrentId && current.track.id !== expectedCurrentId) {
+      // Player moved to an unexpected track — abort the crossfade cleanly
       reset();
     }
   }
@@ -109,18 +200,21 @@ $player.watch((player) => {
 
   // ── Preload phase ──────────────────────────────────────────────────────────
   if (state === 'idle') {
-    if (upcoming.track.id === nextTrack?.track.id) return; // already preloaded
+    if (upcoming.track.id === nextTrack?.track.id) return; // already queued
 
     state = 'preloading';
     nextTrack = upcoming;
     nextTrackSrc = getStreamUrl(upcoming.track.filePath, streamPort);
+    outgoingTrackId = current.track.id;
 
     const deck = getInactiveDeck();
     deck.src = nextTrackSrc;
     deck.load();
 
-    // Kick off BPM detection for both tracks in parallel (results cached)
-    if (settings.djMode === 'beatmatch') {
+    const { djMode } = $appSettings.getState();
+
+    // Kick off BPM detection for both tracks in parallel (results are cached)
+    if (djMode === 'beatmatch') {
       if (current.track.filePath) {
         detectBpm(current.track.id, getStreamUrl(current.track.filePath, streamPort))
           .catch(() => {});
@@ -134,8 +228,8 @@ $player.watch((player) => {
         });
     }
 
-    // For crossfade-only mode mark ready as soon as audio can start
-    if (settings.djMode === 'crossfade') {
+    // For crossfade-only mode, mark ready as soon as audio can start playing
+    if (djMode === 'crossfade') {
       const onCanPlay = () => {
         deck.removeEventListener('canplay', onCanPlay);
         if (state === 'preloading') state = 'preloaded';
@@ -146,20 +240,21 @@ $player.watch((player) => {
     return;
   }
 
-  // ── Crossfade trigger ──────────────────────────────────────────────────────
+  // ── Time-based crossfade trigger ───────────────────────────────────────────
   if (state === 'preloaded') {
     const { currentTime, duration } = player;
     if (duration <= 0) return;
-    const triggerAt = Math.max(0, duration - settings.crossfadeDuration);
+    const triggerAt = Math.max(0, duration - $appSettings.getState().crossfadeDuration);
     if (currentTime >= triggerAt) {
-      startCrossfade(player);
+      manualSkip = false;
+      startCrossfade();
     }
   }
 });
 
 // ── Crossfade execution ───────────────────────────────────────────────────────
 
-function startCrossfade(player: ReturnType<typeof $player.getState>): void {
+function startCrossfade(): void {
   if (state === 'crossfading') return;
   state = 'crossfading';
   setCrossfadeInProgress(true);
@@ -172,17 +267,26 @@ function startCrossfade(player: ReturnType<typeof $player.getState>): void {
 
   // Beatmatch: align tempo and phase
   let rateApplied = 1;
-  if (settings.djMode === 'beatmatch' && nextTrack && player.current) {
-    const currentBeat = getCachedBpm(player.current.track.id);
+  if (settings.djMode === 'beatmatch' && nextTrack && outgoingTrackId) {
+    const outgoingBeat = getCachedBpm(outgoingTrackId);
     const nextBeat = getCachedBpm(nextTrack.track.id);
-    if (currentBeat && nextBeat && Math.abs(currentBeat.bpm - nextBeat.bpm) > 0.5) {
-      rateApplied = currentBeat.bpm / nextBeat.bpm;
+
+    if (outgoingBeat && nextBeat) {
+      // Always set rate even for similar BPMs so beats stay locked
+      rateApplied = outgoingBeat.bpm / nextBeat.bpm;
       inactive.playbackRate = rateApplied;
-      // Start the incoming track at its first detected beat so the downbeats
-      // align as closely as possible with the outgoing track's grid.
-      inactive.currentTime = nextBeat.firstBeatOffset;
+
+      // Phase-aligned start: incoming's first beat lands on outgoing's next beat
+      const outgoingTime = getActiveDeck().currentTime;
+      inactive.currentTime = calcPhaseAlignedStartTime(
+        outgoingTrackId,
+        nextBeat,
+        outgoingTime,
+        rateApplied,
+      );
     } else {
-      inactive.currentTime = 0;
+      // BPM data missing — plain crossfade from the start
+      inactive.currentTime = nextBeat?.firstBeatOffset ?? 0;
     }
   } else {
     inactive.currentTime = 0;
@@ -216,6 +320,7 @@ function startCrossfade(player: ReturnType<typeof $player.getState>): void {
 
 function completeCrossfade(incomingRate: number): void {
   crossfadeTimer = null;
+  if (state !== 'crossfading') return; // aborted between schedule and fire
 
   // Capture references before the swap changes which is active/inactive
   const outgoing = getActiveDeck();
@@ -247,17 +352,22 @@ function completeCrossfade(incomingRate: number): void {
 
   const nxt = nextTrack!;
   const src = nextTrackSrc!;
+  const wasManualSkip = manualSkip;
 
-  // Promote the incoming deck and update lastTrackId/lastSrc in engine so that
-  // the subsequent $player.watch() call skips the redundant reload.
+  // Promote the incoming deck; update lastTrackId/lastSrc in engine so the
+  // next $player.watch() call recognises the track as already loaded.
   swapDecks(nxt.track.id, src);
 
   state = 'idle';
   nextTrack = null;
   nextTrackSrc = null;
+  outgoingTrackId = null;
+  manualSkip = false;
   setCrossfadeInProgress(false);
 
-  // Advance the player queue — $player.watch() will see the track already
-  // loaded and skip the src/load/play calls.
-  trackEnded();
+  if (!wasManualSkip) {
+    // Time-based crossfade: advance the queue now.
+    trackEnded();
+  }
+  // Manual skip: store already advanced when user pressed Next.
 }

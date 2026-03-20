@@ -142,6 +142,17 @@ export function isCrossfadeInProgress(): boolean {
   return crossfadeInProgress;
 }
 
+/**
+ * DJ engine can register a hook that is called whenever engine.ts would
+ * normally do an immediate track reload.  If the hook returns true the reload
+ * is skipped (the DJ engine takes over and drives the transition instead).
+ */
+type TrackChangeHook = (trackId: string, src: string) => boolean;
+let trackChangeHook: TrackChangeHook | null = null;
+export function registerTrackChangeHook(fn: TrackChangeHook): void {
+  trackChangeHook = fn;
+}
+
 // ── Audio event → store ────────────────────────────────────────────────────────
 
 let consecutiveErrors = 0;
@@ -217,8 +228,10 @@ $player.watch((state) => {
   const trackId = current.track.id;
   const src = getStreamUrl(current.track.filePath, streamPort);
 
-  // Track changed — load onto the active deck
+  // Track changed — let the DJ engine intercept if it has this track preloaded
   if (trackId !== lastTrackId || src !== lastSrc) {
+    if (trackChangeHook && trackChangeHook(trackId, src)) return;
+
     lastTrackId = trackId;
     lastSrc = src;
     pendingInitialSeekTime = seekTime > 0 ? seekTime : null;
