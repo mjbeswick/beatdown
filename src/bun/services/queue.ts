@@ -233,6 +233,7 @@ export class DownloadQueue extends EventEmitter {
       artist: t.artist,
       album: getTrackAlbumName(t, content.type === 'album' ? content.name : '') || undefined,
       genres: t.genres,
+      sourceUrl: t.sourceUrl,
       status: 'queued' as TrackStatus,
       progress: 0,
     }));

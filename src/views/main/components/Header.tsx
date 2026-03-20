@@ -18,7 +18,7 @@ const NAV_TITLES: Record<NavSection, string> = {
 
 const NAV_PLACEHOLDER: Partial<Record<NavSection, string>> = {
   nowplaying: 'Filter queue by title…',
-  playlists: 'Search or paste a Spotify URL…',
+  playlists: 'Search or paste a Spotify URL or YouTube Music playlist URL…',
   albums: 'Filter albums…',
   artists: 'Filter artists…',
   favourites: 'Filter favourites…',

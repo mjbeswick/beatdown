@@ -45,12 +45,16 @@ export default function TrackRow({
   compact,
   progressStyle = 'inline',
 }: Props) {
+  const isConverting = track.status === 'converting';
   const isActive = track.status === 'downloading' || track.status === 'converting';
   const isDone = track.status === 'done';
   const isPendingDownload = !isDone;
   const showSpeed = track.status === 'downloading' && !!track.speed && track.speed > 0;
   const showEta = track.status === 'downloading' && !!track.eta;
   const useBackgroundProgress = isActive && progressStyle === 'background';
+  const displayProgress = isConverting ? 100 : track.progress;
+  const progressLabel = isConverting ? 'Finalizing' : `${track.progress}%`;
+  const trailingSlotWidth = progressStyle === 'background' ? 'w-20' : 'w-5';
   const { pos, open, close } = useContextMenu();
   const player = useUnit($player);
   const favourites = useUnit($favourites);
@@ -98,7 +102,7 @@ export default function TrackRow({
         <div
           className="pointer-events-none absolute inset-0 opacity-90"
           style={{
-            backgroundImage: `linear-gradient(to right, rgba(16, 185, 129, 0.18) 0%, rgba(16, 185, 129, 0.18) ${track.progress}%, rgba(16, 185, 129, 0.04) ${track.progress}%, rgba(16, 185, 129, 0.04) 100%)`,
+            backgroundImage: `linear-gradient(to right, ${isConverting ? 'rgba(96, 165, 250, 0.18)' : 'rgba(16, 185, 129, 0.18)'} 0%, ${isConverting ? 'rgba(96, 165, 250, 0.18)' : 'rgba(16, 185, 129, 0.18)'} ${displayProgress}%, ${isConverting ? 'rgba(96, 165, 250, 0.04)' : 'rgba(16, 185, 129, 0.04)'} ${displayProgress}%, ${isConverting ? 'rgba(96, 165, 250, 0.04)' : 'rgba(16, 185, 129, 0.04)'} 100%)`,
           }}
         />
       )}
@@ -129,13 +133,19 @@ export default function TrackRow({
       {isActive && progressStyle === 'inline' && (
         <div className="ml-auto flex shrink-0 items-center justify-end gap-3 pl-3">
           <div className="w-72 shrink-0 flex items-center gap-2">
-            <div className="w-10 shrink-0 text-right text-xs text-zinc-600 font-mono tabular-nums">
-              {track.progress}%
+            <div
+              className={`shrink-0 text-right ${
+                isConverting
+                  ? 'w-20 text-[10px] font-medium uppercase tracking-[0.08em] text-blue-400'
+                  : 'w-10 text-xs text-zinc-600 font-mono tabular-nums'
+              }`}
+            >
+              {progressLabel}
             </div>
             <div className="h-1 flex-1 bg-zinc-700 rounded-full overflow-hidden">
               <div
-                className="h-full bg-emerald-500 rounded-full transition-all duration-300"
-                style={{ width: `${track.progress}%` }}
+                className={`h-full rounded-full transition-all duration-300 ${isConverting ? 'bg-blue-400' : 'bg-emerald-500'}`}
+                style={{ width: `${displayProgress}%` }}
               />
             </div>
             <div className="w-20 shrink-0 text-right font-mono text-xs text-zinc-600 tabular-nums">
@@ -151,9 +161,6 @@ export default function TrackRow({
 
       {useBackgroundProgress && (
         <div className="relative z-10 ml-auto flex shrink-0 items-center justify-end gap-3 pl-3">
-          <div className="w-10 shrink-0 text-right text-xs text-zinc-500 font-mono tabular-nums">
-            {track.progress}%
-          </div>
           <div className="w-20 shrink-0 text-right font-mono text-xs text-zinc-500 tabular-nums">
             {showSpeed ? fmtSpeed(track.speed!) : ''}
           </div>
@@ -163,8 +170,16 @@ export default function TrackRow({
         </div>
       )}
 
-      <div className="relative z-10 w-5 shrink-0 flex items-center justify-end">
-        {isDone && (
+      <div className={`relative z-10 ${trailingSlotWidth} shrink-0 flex items-center justify-end`}>
+        {useBackgroundProgress ? (
+          <span
+            className={isConverting
+              ? 'truncate text-right text-[10px] font-medium uppercase tracking-[0.08em] text-blue-400'
+              : 'text-right text-xs text-zinc-500 font-mono tabular-nums'}
+          >
+            {progressLabel}
+          </span>
+        ) : isDone && (
           <button
             className={`shrink-0 transition-opacity ${isFavourited ? 'opacity-100' : 'opacity-0 group-hover:opacity-40 hover:!opacity-100'}`}
             onClick={(e) => { e.stopPropagation(); toggleFavourite(track.id); }}

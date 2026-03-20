@@ -3,7 +3,7 @@ import type { DownloadItem, LyricLine } from '../shared/types';
 import type { AddDownloadParams } from '../shared/types';
 import type { BeatdownRPCSchema } from '../shared/rpc-schema';
 import { queue } from './services/queue';
-import { getSpotifyContent } from './services/spotify';
+import { getContent } from './services/content';
 import { getLyrics } from './services/lyrics';
 import { paths } from './services/paths';
 import { appConfig } from './services/appConfig';
@@ -205,13 +205,13 @@ const rpc = defineElectrobunRPC<BeatdownRPCSchema, 'bun'>('bun', {
   handlers: {
     requests: {
       'download:preview': async ({ url }) => {
-        return await getSpotifyContent(url);
+        return await getContent(url);
       },
 
       'download:add': async ({ url, format, quality }) => {
         rpc.proxy.send['download:fetching'](undefined as any);
         try {
-          const content = await getSpotifyContent(url);
+          const content = await getContent(url);
           rpc.proxy.send['download:fetch_done'](undefined as any);
           return await queue.add(content, url, format, quality);
         } catch (err) {

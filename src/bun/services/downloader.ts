@@ -99,6 +99,7 @@ export function downloadTrack(
   genres?: string[]
 ): Promise<string> {
   const query = `ytsearch1:${track.artist} ${track.title} audio`;
+  const input = track.sourceUrl?.trim() || query;
   const targetExt = format === 'aac' ? 'm4a' : format;
   const outputTemplate = path.join(outputDir, '%(title)s.%(ext)s');
 
@@ -108,7 +109,7 @@ export function downloadTrack(
       : ['--audio-format', targetExt, '--audio-quality', quality === 'auto' ? '5' : quality];
 
   const args = [
-    query,
+    input,
     '--extract-audio',
     ...qualityArgs,
     '--output', outputTemplate,

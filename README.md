@@ -1,6 +1,6 @@
 # Beatdown
 
-A local Spotify playlist downloader with a Transmission-inspired UI.
+A local Spotify downloader with YouTube Music playlist support and a Transmission-inspired UI.
 
 ## Prerequisites
 
@@ -28,3 +28,8 @@ npm run dev
 ## Downloads
 
 Files are saved to `~/Music/Beatdown/<playlist-name>/`
+
+Supported URLs:
+
+- Spotify track, album, and playlist URLs
+- YouTube Music playlist URLs

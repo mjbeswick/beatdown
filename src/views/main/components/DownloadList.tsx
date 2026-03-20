@@ -44,7 +44,7 @@ export default function DownloadList({ searchQuery = '' }: Props) {
             <Music2 size={40} className="mx-auto mb-3 text-zinc-700" />
             <p className="text-zinc-600 text-sm">{searchQuery ? 'No matches' : 'No downloads'}</p>
             <p className="text-zinc-700 text-xs mt-1">
-              {searchQuery ? 'Try a different search' : 'Paste a Spotify URL to get started'}
+              {searchQuery ? 'Try a different search' : 'Paste a Spotify URL or YouTube Music playlist URL to get started'}
             </p>
           </div>
         </div>

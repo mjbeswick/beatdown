@@ -122,10 +122,10 @@ export function savePlaylist(item: DownloadItem): void {
 
   const pending = item.tracks.filter((t) => t.status !== 'done');
   if (pending.length > 0) {
-    lines.push('# Pending tracks (index|trackId|artist|title|album|genresJson)');
+    lines.push('# Pending tracks (index|trackId|artist|title|album|genresJson|sourceUrl)');
     for (const t of pending) {
       lines.push(
-        `#EXTREEL-PENDING:${t.index}|${t.id}|${escPipe(t.artist)}|${escPipe(t.title)}|${escPipe(t.album ?? '')}|${escPipe(encodeGenresField(t.genres))}`
+        `#EXTREEL-PENDING:${t.index}|${t.id}|${escPipe(t.artist)}|${escPipe(t.title)}|${escPipe(t.album ?? '')}|${escPipe(encodeGenresField(t.genres))}|${escPipe(t.sourceUrl ?? '')}`
       );
     }
     lines.push('');
@@ -136,7 +136,7 @@ export function savePlaylist(item: DownloadItem): void {
     lines.push('# Downloaded tracks');
     for (const t of done) {
       lines.push(
-        `#EXTREEL-DONE:${t.index}|${t.id}|${escPipe(t.artist)}|${escPipe(t.title)}|${escPipe(t.album ?? '')}|${escPipe(encodeGenresField(t.genres))}`
+        `#EXTREEL-DONE:${t.index}|${t.id}|${escPipe(t.artist)}|${escPipe(t.title)}|${escPipe(t.album ?? '')}|${escPipe(encodeGenresField(t.genres))}|${escPipe(t.sourceUrl ?? '')}`
       );
       lines.push(`#EXTINF:-1,${t.artist} - ${t.title}`);
       lines.push(t.filePath ? toRelativePath(t.filePath) : '');
@@ -199,7 +199,15 @@ function parseM3U(filePath: string): DownloadItem | null {
   let addedAt = new Date().toISOString();
   let coverArt: string | undefined;
 
-  const pendingEntries: { index: number; id: string; artist: string; title: string; album?: string; genres?: string[] }[] = [];
+  const pendingEntries: {
+    index: number;
+    id: string;
+    artist: string;
+    title: string;
+    album?: string;
+    genres?: string[];
+    sourceUrl?: string;
+  }[] = [];
   const doneEntries: {
     index: number;
     id: string;
@@ -207,6 +215,7 @@ function parseM3U(filePath: string): DownloadItem | null {
     title: string;
     album?: string;
     genres?: string[];
+    sourceUrl?: string;
     filePath: string;
   }[] = [];
 
@@ -232,6 +241,7 @@ function parseM3U(filePath: string): DownloadItem | null {
           title: unescPipe(parsed[3]),
           album: decodeOptionalMetadataField(parsed[4]),
           genres: decodeGenresField(parsed[5]),
+          sourceUrl: decodeOptionalMetadataField(parsed[6]),
         });
       }
     } else if (line.startsWith('#EXTREEL-DONE:')) {
@@ -255,6 +265,7 @@ function parseM3U(filePath: string): DownloadItem | null {
           title: unescPipe(parsed[3]),
           album: decodeOptionalMetadataField(parsed[4]),
           genres: decodeGenresField(parsed[5]),
+          sourceUrl: decodeOptionalMetadataField(parsed[6]),
           filePath: trackFilePath,
         });
       }
@@ -279,6 +290,7 @@ function parseM3U(filePath: string): DownloadItem | null {
       artist: p.artist,
       album: p.album ?? (type === 'album' ? name : undefined),
       genres: p.genres,
+      sourceUrl: p.sourceUrl,
       status: 'queued',
       progress: 0,
     });
@@ -294,6 +306,7 @@ function parseM3U(filePath: string): DownloadItem | null {
       artist: d.artist,
       album: d.album ?? (type === 'album' ? name : undefined),
       genres: d.genres,
+      sourceUrl: d.sourceUrl,
       status: exists ? 'done' : 'queued',
       progress: exists ? 100 : 0,
       filePath: exists ? d.filePath : undefined,

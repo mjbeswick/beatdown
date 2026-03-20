@@ -6,7 +6,7 @@ export type { BeatdownRPCSchema };
 // Browser side: we HANDLE webview.requests (empty) and CALL bun.requests
 // We RECEIVE bun.messages and SEND webview.messages (empty)
 export const rpc = createRPC<BeatdownViewLocalSchema, BeatdownViewRemoteSchema>({
-  maxRequestTime: 15000,
+  maxRequestTime: 30000,
   requestHandler: {},
   transport: {
     // Stub transport; Electroview replaces it on init via rpc.setTransport()

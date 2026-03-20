@@ -48,6 +48,48 @@ function getSpotifyPlaylistWebUrl(url: string): string | null {
   }
 }
 
+function getYouTubePlaylistSource(url: string): { label: string; url: string } | null {
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+
+  try {
+    const parsed = new URL(trimmed);
+    const listId = parsed.searchParams.get('list')?.trim();
+    if (!listId) return null;
+
+    const hostname = parsed.hostname.toLowerCase();
+    if (hostname === 'music.youtube.com') {
+      return {
+        label: 'Open in YouTube Music',
+        url: `https://music.youtube.com/playlist?list=${encodeURIComponent(listId)}`,
+      };
+    }
+
+    if (hostname === 'youtube.com' || hostname === 'www.youtube.com' || hostname === 'm.youtube.com') {
+      return {
+        label: 'Open on YouTube',
+        url: `https://www.youtube.com/playlist?list=${encodeURIComponent(listId)}`,
+      };
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function getPlaylistSourceLink(url: string): { label: string; url: string } | null {
+  const spotifyUrl = getSpotifyPlaylistWebUrl(url);
+  if (spotifyUrl) {
+    return {
+      label: 'Open in Spotify',
+      url: spotifyUrl,
+    };
+  }
+
+  return getYouTubePlaylistSource(url);
+}
+
 function getPlayableTracks(playlist: DownloadItem) {
   return playlist.tracks
     .filter((track) => track.status === 'done')
@@ -226,12 +268,12 @@ export default function PlaylistsView() {
   const doneTracks = selected ? getPlayableTracks(selected) : [];
   const isActiveDownload = selected ? ACTIVE_DOWNLOAD_STATUSES.includes(selected.status) : false;
   const isPaused = selected?.status === 'paused';
-  const spotifyPlaylistUrl = selected ? getSpotifyPlaylistWebUrl(selected.url) : null;
+  const sourceLink = selected ? getPlaylistSourceLink(selected.url) : null;
   const selectedSizeLabel = selected && selected.sizeOnDiskBytes > 0 ? formatBytes(selected.sizeOnDiskBytes) : null;
 
-  const openSelectedPlaylistInSpotify = () => {
-    if (!spotifyPlaylistUrl) return;
-    void rpc.proxy.request['app:openExternal']({ url: spotifyPlaylistUrl }).catch(() => {});
+  const openSelectedPlaylistSource = () => {
+    if (!sourceLink) return;
+    void rpc.proxy.request['app:openExternal']({ url: sourceLink.url }).catch(() => {});
   };
 
   return (
@@ -279,13 +321,13 @@ export default function PlaylistsView() {
                     {doneTracks.length} / {selected.totalTracks} tracks
                     {selectedSizeLabel ? ` · ${selectedSizeLabel} on disk` : ''}
                   </span>
-                  {spotifyPlaylistUrl && (
+                  {sourceLink && (
                     <button
-                      onClick={openSelectedPlaylistInSpotify}
+                      onClick={openSelectedPlaylistSource}
                       className="inline-flex items-center gap-1 text-zinc-400 hover:text-emerald-400 transition-colors"
                     >
                       <ExternalLink size={11} />
-                      Open in Spotify
+                      {sourceLink.label}
                     </button>
                   )}
                 </div>
@@ -325,7 +367,7 @@ export default function PlaylistsView() {
             <div className="shrink-0 bg-zinc-800/60 border-b border-zinc-700/60 flex items-center gap-2 px-3 py-1.5 text-xs text-zinc-500 font-medium select-none">
               <div className="w-[11px] shrink-0" />
               <div className="flex-1 min-w-0">Title</div>
-              <div className="w-7 shrink-0" />
+              <div className="w-20 shrink-0" />
             </div>
 
             <div className="flex-1 overflow-y-auto overflow-x-hidden">
