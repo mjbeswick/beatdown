@@ -3,6 +3,7 @@ import { Heart, Play } from 'lucide-react';
 import { $downloads, $search } from '../stores/downloads';
 import { $favourites } from '../stores/favourites';
 import { playPlaylist, playTrack } from '../stores/player';
+import { getTrackAlbumName } from '../../../shared/track-metadata';
 import TrackRow from './TrackRow';
 import type { TrackInfo } from '../../../shared/types';
 
@@ -16,7 +17,12 @@ export default function FavouritesView() {
   for (const item of downloads) {
     for (const track of item.tracks) {
       if (track.status === 'done' && favourites.includes(track.id)) {
-        tracks.push({ track, downloadId: item.id, coverArt: item.coverArt, albumName: item.name });
+        tracks.push({
+          track,
+          downloadId: item.id,
+          coverArt: item.coverArt,
+          albumName: getTrackAlbumName(track, item.name),
+        });
       }
     }
   }

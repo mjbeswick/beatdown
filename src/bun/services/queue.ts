@@ -11,6 +11,7 @@ import type {
   TrackInfo,
   TrackStatus,
 } from '../../shared/types';
+import { getTrackAlbumName } from '../../shared/track-metadata';
 import {
   downloadTrack,
   findExistingTrack,
@@ -230,7 +231,8 @@ export class DownloadQueue extends EventEmitter {
       index: i,
       title: t.title,
       artist: t.artist,
-      album: t.album,
+      album: getTrackAlbumName(t, content.type === 'album' ? content.name : '') || undefined,
+      genres: t.genres,
       status: 'queued' as TrackStatus,
       progress: 0,
     }));
@@ -585,7 +587,8 @@ export class DownloadQueue extends EventEmitter {
           }
         },
         signal,
-        track.album ?? (item.type === 'album' ? item.name : undefined)
+        track.album ?? (item.type === 'album' ? item.name : undefined),
+        track.genres
       );
 
       const currentItem = this.items.get(downloadId);

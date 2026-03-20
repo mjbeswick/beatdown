@@ -41,6 +41,7 @@ export interface DownloadItem {
 export interface SpotifyTrack {
   title: string;
   artist: string;
+  album?: string;
 }
 
 export interface SpotifyContent {

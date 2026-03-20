@@ -9,15 +9,17 @@ import {
   CheckCircle2,
   Loader2,
   Clock,
-  RefreshCw,
+  Download as DownloadIcon,
   Trash2,
   Play,
+  PlayCircle,
   Pause,
   PauseCircle,
 } from 'lucide-react';
-import { $expandedRows, rowToggled, removeDownloadFx, redownloadFx, pauseDownloadFx, resumeDownloadFx } from '../stores/downloads';
+import { $expandedRows, rowToggled, removeDownloadFx, redownloadFx, pauseDownloadFx, resumeDownloadFx, getPrimaryDownloadAction } from '../stores/downloads';
 import { playDownloadPlaylist, playPlaylist, enqueueTrack } from '../stores/player';
 import type { DownloadItem } from '../../../shared/types';
+import { getTrackAlbumName } from '../../../shared/track-metadata';
 import TrackRow from './TrackRow';
 import { useContextMenu } from '../hooks/useContextMenu';
 import ContextMenu from './ContextMenu';
@@ -56,6 +58,7 @@ export default function DownloadRow({ item }: Props) {
   const isActive = item.status === 'active' || item.status === 'fetching';
   const isDone = item.status === 'done';
   const { pos, open, close } = useContextMenu();
+  const primaryDownloadAction = getPrimaryDownloadAction(item);
 
   const doneTracks = item.tracks.filter((t) => t.status === 'done');
 
@@ -72,7 +75,7 @@ export default function DownloadRow({ item }: Props) {
         track: t,
         downloadId: item.id,
         coverArt: item.coverArt,
-        albumName: item.name,
+        albumName: getTrackAlbumName(t, item.name),
       })),
       startIndex: 0,
     });
@@ -80,7 +83,12 @@ export default function DownloadRow({ item }: Props) {
 
   const enqueueAll = () => {
     for (const t of doneTracks) {
-      enqueueTrack({ track: t, downloadId: item.id, coverArt: item.coverArt, albumName: item.name });
+      enqueueTrack({
+        track: t,
+        downloadId: item.id,
+        coverArt: item.coverArt,
+        albumName: getTrackAlbumName(t, item.name),
+      });
     }
   };
 
@@ -201,13 +209,20 @@ export default function DownloadRow({ item }: Props) {
               { label: 'Enqueue All', icon: <ListMusic size={13} />, onClick: enqueueAll },
               { separator: true as const },
             ] : []),
-            {
-              label: 'Re-download',
-              icon: <RefreshCw size={13} />,
-              onClick: () => redownloadFx(item.id),
-              disabled: item.status === 'active' || item.status === 'fetching',
-            },
-            { separator: true as const },
+            ...(primaryDownloadAction ? [
+              {
+                label: primaryDownloadAction === 'resume' ? 'Resume' : 'Download',
+                icon: primaryDownloadAction === 'resume' ? <PlayCircle size={13} /> : <DownloadIcon size={13} />,
+                onClick: () => {
+                  if (primaryDownloadAction === 'resume') {
+                    resumeDownloadFx(item.id);
+                    return;
+                  }
+                  redownloadFx(item.id);
+                },
+              },
+              { separator: true as const },
+            ] : []),
             {
               label: 'Remove',
               icon: <Trash2 size={13} />,
@@ -227,12 +242,12 @@ export default function DownloadRow({ item }: Props) {
               track={track}
               downloadId={item.id}
               coverArt={item.coverArt}
-              albumName={item.name}
+              albumName={getTrackAlbumName(track, item.name)}
               allTracks={item.tracks.map((t) => ({
                 track: t,
                 downloadId: item.id,
                 coverArt: item.coverArt,
-                albumName: item.name,
+                albumName: getTrackAlbumName(t, item.name),
               }))}
             />
           ))}

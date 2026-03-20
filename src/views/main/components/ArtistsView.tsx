@@ -4,6 +4,7 @@ import { Mic2, Play } from 'lucide-react';
 import { $downloads, $search } from '../stores/downloads';
 import { $focusedArtist } from '../stores/nav';
 import { playPlaylist } from '../stores/player';
+import { getTrackAlbumName } from '../../../shared/track-metadata';
 import ResizablePaneLayout from './ResizablePaneLayout';
 import TrackRow from './TrackRow';
 import type { TrackInfo } from '../../../shared/types';
@@ -22,7 +23,7 @@ export default function ArtistsView() {
           track,
           downloadId: item.id,
           coverArt: item.coverArt,
-          albumName: item.name,
+          albumName: getTrackAlbumName(track, item.name),
         });
       }
     }

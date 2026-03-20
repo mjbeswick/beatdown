@@ -249,13 +249,13 @@ export default function NowPlayingView({
   ];
 
   const sidePanel = (
-    <div className="flex h-full flex-col bg-zinc-950/30 backdrop-blur-md">
+    <div className="flex h-full min-h-0 min-w-0 flex-col bg-zinc-950/30 backdrop-blur-md">
       <div className="flex border-b border-zinc-700/60 shrink-0">
         {(['queue', 'lyrics'] as Tab[]).map((panelTab) => (
           <button
             key={panelTab}
             onClick={() => setTab(panelTab)}
-            className={`flex-1 font-semibold uppercase tracking-wider transition-colors ${
+            className={`flex flex-1 items-center justify-center font-semibold uppercase leading-none tracking-wider transition-colors ${
               tab === panelTab
                 ? 'text-zinc-100 border-b-2 border-emerald-400'
                 : 'text-zinc-500 hover:text-zinc-300'
@@ -273,7 +273,7 @@ export default function NowPlayingView({
       </div>
 
       {tab === 'queue' && (
-        <div className="flex-1 overflow-y-auto">
+        <div className="min-h-0 flex-1 overflow-y-auto">
           {visibleQueue.length === 0 ? (
             <div className="h-full flex items-center justify-center text-zinc-600" style={{ fontSize: 'clamp(0.8rem, 1.15vmin, 0.95rem)' }}>
               Queue is empty
@@ -391,7 +391,7 @@ export default function NowPlayingView({
 
       {tab === 'lyrics' && (
         <div
-          className="flex-1 overflow-y-auto space-y-1"
+          className="min-h-0 flex-1 overflow-y-auto space-y-1"
           style={{
             padding: 'clamp(0.9rem, 2vmin, 1.3rem)',
             maskImage: 'linear-gradient(to bottom, transparent 0%, black 12%, black 88%, transparent 100%)',
@@ -444,14 +444,7 @@ export default function NowPlayingView({
   );
 
   const mainContent = (
-    <div
-      className="relative flex h-full flex-col items-center justify-center min-w-0"
-      style={{
-        gap: 'clamp(1.1rem, 2.6vmin, 2rem)',
-        paddingInline: 'clamp(1rem, 4vmin, 3.25rem)',
-        paddingBlock: 'clamp(1.35rem, 4.8vmin, 3.4rem)',
-      }}
-    >
+    <div className="relative flex h-full min-h-0 min-w-0 overflow-y-auto overflow-x-hidden">
       <div
         className="absolute z-20"
         style={{
@@ -509,103 +502,112 @@ export default function NowPlayingView({
       </div>
 
       <div
-        className={`aspect-square rounded-2xl overflow-hidden shadow-2xl transition-all duration-500 ${
-          player.isPlaying ? 'scale-100 shadow-black/60' : 'scale-[0.93] shadow-black/40 opacity-80'
-        }`}
-        style={{ width: 'clamp(15rem, 46vmin, 34rem)' }}
-        onContextMenu={openAlbumArtMenu}
-        title="Right-click for track actions"
+        className="flex min-h-full w-full flex-col items-center justify-center"
+        style={{
+          gap: 'clamp(1.1rem, 2.6vmin, 2rem)',
+          paddingInline: 'clamp(1rem, 4vmin, 3.25rem)',
+          paddingBlock: 'clamp(1.35rem, 4.8vmin, 3.4rem)',
+        }}
       >
-        {current.coverArt ? (
-          <img
-            src={current.coverArt}
-            alt="Album art"
-            className="w-full h-full object-cover"
-            draggable={false}
-          />
-        ) : (
-          <div className="w-full h-full bg-zinc-800 flex items-center justify-center">
-            <Music2
-              strokeWidth={1}
-              className="text-zinc-600"
-              style={{ width: 'clamp(3rem, 9vmin, 5rem)', height: 'clamp(3rem, 9vmin, 5rem)' }}
+        <div
+          className={`aspect-square rounded-2xl overflow-hidden shadow-2xl transition-all duration-500 ${
+            player.isPlaying ? 'scale-100 shadow-black/60' : 'scale-[0.93] shadow-black/40 opacity-80'
+          }`}
+          style={{ width: 'clamp(15rem, 46vmin, 34rem)' }}
+          onContextMenu={openAlbumArtMenu}
+          title="Right-click for track actions"
+        >
+          {current.coverArt ? (
+            <img
+              src={current.coverArt}
+              alt="Album art"
+              className="w-full h-full object-cover"
+              draggable={false}
             />
-          </div>
-        )}
-      </div>
-
-      {albumArtMenuPos && (
-        <ContextMenu
-          x={albumArtMenuPos.x}
-          y={albumArtMenuPos.y}
-          onClose={closeAlbumArtMenu}
-          items={albumArtMenuItems}
-        />
-      )}
-
-      <div className="w-full text-center space-y-1.5" style={{ maxWidth: 'min(38rem, 70vw)' }}>
-        <div className="flex items-center justify-center gap-2">
-          <div ref={titleContainerRef} className="overflow-hidden min-w-0">
-            <h2
-              ref={titleRef}
-              className="font-bold text-zinc-100 cursor-pointer hover:underline whitespace-nowrap"
-              onClick={() => current.downloadId && navToAlbum(current.downloadId)}
-              title={current.track.title}
-              style={
-                marqueeShift > 0
-                  ? ({
-                      display: 'inline-block',
-                      animation: 'marquee-scroll 8s ease-in-out infinite alternate',
-                      '--marquee-shift': `-${marqueeShift}px`,
-                      fontSize: 'clamp(1.45rem, 3.8vmin, 3rem)',
-                      lineHeight: '1.05',
-                    } as React.CSSProperties)
-                  : ({
-                      fontSize: 'clamp(1.45rem, 3.8vmin, 3rem)',
-                      lineHeight: '1.05',
-                    } as React.CSSProperties)
-              }
-            >
-              {current.track.title}
-            </h2>
-          </div>
-          <button
-            onClick={() => toggleFavourite(current.track.id)}
-            className={`shrink-0 transition-colors ${isFav ? 'text-rose-400' : 'text-zinc-600 hover:text-rose-400'}`}
-            aria-label={isFav ? 'Remove from favourites' : 'Add to favourites'}
-          >
-            <Heart
-              fill={isFav ? 'currentColor' : 'none'}
-              style={{ width: 'clamp(1rem, 2vmin, 1.35rem)', height: 'clamp(1rem, 2vmin, 1.35rem)' }}
-            />
-          </button>
+          ) : (
+            <div className="w-full h-full bg-zinc-800 flex items-center justify-center">
+              <Music2
+                strokeWidth={1}
+                className="text-zinc-600"
+                style={{ width: 'clamp(3rem, 9vmin, 5rem)', height: 'clamp(3rem, 9vmin, 5rem)' }}
+              />
+            </div>
+          )}
         </div>
 
-        <button
-          className="text-zinc-400 hover:text-zinc-200 hover:underline flex items-center gap-1.5 mx-auto transition-colors"
-          onClick={() => navToArtist(current.track.artist)}
-          style={{ fontSize: 'clamp(0.95rem, 1.8vmin, 1.3rem)' }}
-        >
-          <Mic2
-            className="shrink-0"
-            style={{ width: 'clamp(0.75rem, 1.2vmin, 0.95rem)', height: 'clamp(0.75rem, 1.2vmin, 0.95rem)' }}
+        {albumArtMenuPos && (
+          <ContextMenu
+            x={albumArtMenuPos.x}
+            y={albumArtMenuPos.y}
+            onClose={closeAlbumArtMenu}
+            items={albumArtMenuItems}
           />
-          {current.track.artist}
-        </button>
+        )}
 
-        <button
-          className="text-zinc-500 hover:text-zinc-300 hover:underline transition-colors"
-          onClick={() => current.downloadId && navToAlbum(current.downloadId)}
-          style={{ fontSize: 'clamp(0.78rem, 1.3vmin, 1rem)' }}
-        >
-          {current.albumName}
-        </button>
+        <div className="w-full text-center space-y-1.5" style={{ maxWidth: 'min(38rem, 70vw)' }}>
+          <div className="flex items-center justify-center gap-2">
+            <div ref={titleContainerRef} className="overflow-hidden min-w-0">
+              <h2
+                ref={titleRef}
+                className="font-bold text-zinc-100 cursor-pointer hover:underline whitespace-nowrap"
+                onClick={() => current.downloadId && navToAlbum(current.downloadId)}
+                title={current.track.title}
+                style={
+                  marqueeShift > 0
+                    ? ({
+                        display: 'inline-block',
+                        animation: 'marquee-scroll 8s ease-in-out infinite alternate',
+                        '--marquee-shift': `-${marqueeShift}px`,
+                        fontSize: 'clamp(1.45rem, 3.8vmin, 3rem)',
+                        lineHeight: '1.05',
+                      } as React.CSSProperties)
+                    : ({
+                        fontSize: 'clamp(1.45rem, 3.8vmin, 3rem)',
+                        lineHeight: '1.05',
+                      } as React.CSSProperties)
+                }
+              >
+                {current.track.title}
+              </h2>
+            </div>
+            <button
+              onClick={() => toggleFavourite(current.track.id)}
+              className={`shrink-0 transition-colors ${isFav ? 'text-rose-400' : 'text-zinc-600 hover:text-rose-400'}`}
+              aria-label={isFav ? 'Remove from favourites' : 'Add to favourites'}
+            >
+              <Heart
+                fill={isFav ? 'currentColor' : 'none'}
+                style={{ width: 'clamp(1rem, 2vmin, 1.35rem)', height: 'clamp(1rem, 2vmin, 1.35rem)' }}
+              />
+            </button>
+          </div>
+
+          <button
+            className="text-zinc-400 hover:text-zinc-200 hover:underline flex items-center gap-1.5 mx-auto transition-colors"
+            onClick={() => navToArtist(current.track.artist)}
+            style={{ fontSize: 'clamp(0.95rem, 1.8vmin, 1.3rem)' }}
+          >
+            <Mic2
+              className="shrink-0"
+              style={{ width: 'clamp(0.75rem, 1.2vmin, 0.95rem)', height: 'clamp(0.75rem, 1.2vmin, 0.95rem)' }}
+            />
+            {current.track.artist}
+          </button>
+
+          <button
+            className="text-zinc-500 hover:text-zinc-300 hover:underline transition-colors"
+            onClick={() => current.downloadId && navToAlbum(current.downloadId)}
+            style={{ fontSize: 'clamp(0.78rem, 1.3vmin, 1rem)' }}
+          >
+            {current.albumName}
+          </button>
+        </div>
       </div>
     </div>
   );
 
   return (
-    <div className="now-playing-view flex-1 flex overflow-hidden relative">
+    <div className="now-playing-view relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
       {([0, 1] as const).map((slot) =>
         bgSlots[slot] ? (
           <img
@@ -623,7 +625,7 @@ export default function NowPlayingView({
 
       <div className="now-playing-overlay absolute inset-0 pointer-events-none" />
 
-      <div className="relative z-10 flex flex-1 overflow-hidden">
+      <div className="relative z-10 flex min-h-0 min-w-0 flex-1 overflow-hidden">
         {showSidebar ? (
           <ResizablePaneLayout
             side="right"

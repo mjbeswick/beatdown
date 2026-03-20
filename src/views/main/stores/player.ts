@@ -1,5 +1,6 @@
 import { createStore, createEvent, createEffect, sample } from 'effector';
 import type { DownloadItem, TrackInfo } from '../../../shared/types';
+import { getTrackAlbumName } from '../../../shared/track-metadata';
 import { rpc } from '../rpc';
 import { downloadRemoved, downloadUpdated, loadAllFx } from './downloads';
 import { loadSettingsFx } from './settingsLoader';
@@ -338,7 +339,7 @@ function asPlayingTrack(track: TrackInfo, item: Pick<DownloadItem, 'id' | 'cover
     track,
     downloadId: item.id,
     coverArt: item.coverArt,
-    albumName: item.name,
+    albumName: getTrackAlbumName(track, item.name),
   };
 }
 
@@ -723,10 +724,8 @@ sample({
       if (!track || track.status !== 'done') continue;
 
       tracks.push({
-        track,
-        downloadId: item.id,
+        ...asPlayingTrack(track, item),
         coverArt: follow.coverArt,
-        albumName: follow.albumName,
       });
     }
 

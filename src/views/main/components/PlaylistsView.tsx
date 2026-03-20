@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { useUnit } from 'effector-react';
-import { ListMusic, Play, Music2, Pause, PlayCircle, Loader2, Clock3, RefreshCw, Trash2, ExternalLink } from 'lucide-react';
-import { $downloads, $search, pauseDownloadFx, resumeDownloadFx, redownloadFx, removeDownloadFx } from '../stores/downloads';
+import { ListMusic, Play, Music2, Pause, PlayCircle, Loader2, Clock3, Download as DownloadIcon, Trash2, ExternalLink } from 'lucide-react';
+import { $downloads, $search, pauseDownloadFx, resumeDownloadFx, redownloadFx, removeDownloadFx, getPrimaryDownloadAction } from '../stores/downloads';
 import { enqueueTrack, playDownloadPlaylist } from '../stores/player';
 import type { DownloadItem, DownloadStatus } from '../../../shared/types';
+import { getTrackAlbumName } from '../../../shared/track-metadata';
 import { rpc } from '../rpc';
 import ContextMenu, { type ContextMenuEntry } from './ContextMenu';
 import { useContextMenu } from '../hooks/useContextMenu';
@@ -54,7 +55,7 @@ function getPlayableTracks(playlist: DownloadItem) {
       track,
       downloadId: playlist.id,
       coverArt: playlist.coverArt,
-      albumName: playlist.name,
+      albumName: getTrackAlbumName(track, playlist.name),
     }));
 }
 
@@ -102,6 +103,7 @@ interface PlaylistListItemProps {
 function PlaylistListItem({ item, isSelected, onSelect }: PlaylistListItemProps) {
   const { pos, open, close } = useContextMenu();
   const playableTracks = getPlayableTracks(item);
+  const primaryDownloadAction = getPrimaryDownloadAction(item);
   const showStatus = item.status !== 'done' && item.status !== 'error';
   const sizeLabel = item.sizeOnDiskBytes > 0 ? formatBytes(item.sizeOnDiskBytes) : null;
 
@@ -120,28 +122,31 @@ function PlaylistListItem({ item, isSelected, onSelect }: PlaylistListItemProps)
       { label: 'Pause', icon: <Pause size={13} />, onClick: () => pauseDownloadFx(item.id) },
       { separator: true }
     );
-  } else if (item.status === 'paused') {
+  }
+
+  if (primaryDownloadAction) {
     menuItems.push(
-      { label: 'Resume', icon: <PlayCircle size={13} />, onClick: () => resumeDownloadFx(item.id) },
+      {
+        label: primaryDownloadAction === 'resume' ? 'Resume' : 'Download',
+        icon: primaryDownloadAction === 'resume' ? <PlayCircle size={13} /> : <DownloadIcon size={13} />,
+        onClick: () => {
+          if (primaryDownloadAction === 'resume') {
+            resumeDownloadFx(item.id);
+            return;
+          }
+          redownloadFx(item.id);
+        },
+      },
       { separator: true }
     );
   }
 
-  menuItems.push(
-    {
-      label: 'Re-download',
-      icon: <RefreshCw size={13} />,
-      onClick: () => redownloadFx(item.id),
-      disabled: item.status === 'active' || item.status === 'fetching',
-    },
-    { separator: true },
-    {
-      label: 'Remove',
-      icon: <Trash2 size={13} />,
-      onClick: () => removeDownloadFx(item.id),
-      danger: true,
-    }
-  );
+  menuItems.push({
+    label: 'Remove',
+    icon: <Trash2 size={13} />,
+    onClick: () => removeDownloadFx(item.id),
+    danger: true,
+  });
 
   return (
     <>
@@ -330,8 +335,9 @@ export default function PlaylistsView() {
                   track={track}
                   downloadId={selected.id}
                   coverArt={selected.coverArt}
-                  albumName={selected.name}
+                  albumName={getTrackAlbumName(track, selected.name)}
                   compact
+                  progressStyle="background"
                   allTracks={doneTracks}
                 />
               ))}

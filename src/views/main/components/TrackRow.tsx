@@ -33,13 +33,24 @@ interface Props {
   albumName?: string;
   allTracks?: Array<{ track: TrackInfo; downloadId: string; coverArt?: string; albumName: string }>;
   compact?: boolean;
+  progressStyle?: 'inline' | 'background';
 }
 
-export default function TrackRow({ track, downloadId, coverArt, albumName = '', allTracks, compact }: Props) {
+export default function TrackRow({
+  track,
+  downloadId,
+  coverArt,
+  albumName = '',
+  allTracks,
+  compact,
+  progressStyle = 'inline',
+}: Props) {
   const isActive = track.status === 'downloading' || track.status === 'converting';
   const isDone = track.status === 'done';
+  const isPendingDownload = !isDone;
   const showSpeed = track.status === 'downloading' && !!track.speed && track.speed > 0;
   const showEta = track.status === 'downloading' && !!track.eta;
+  const useBackgroundProgress = isActive && progressStyle === 'background';
   const { pos, open, close } = useContextMenu();
   const player = useUnit($player);
   const favourites = useUnit($favourites);
@@ -83,28 +94,39 @@ export default function TrackRow({ track, downloadId, coverArt, albumName = '', 
       onDoubleClick={handleDoubleClick}
       onContextMenu={downloadId ? open : undefined}
     >
+      {useBackgroundProgress && (
+        <div
+          className="pointer-events-none absolute inset-0 opacity-90"
+          style={{
+            backgroundImage: `linear-gradient(to right, rgba(16, 185, 129, 0.18) 0%, rgba(16, 185, 129, 0.18) ${track.progress}%, rgba(16, 185, 129, 0.04) ${track.progress}%, rgba(16, 185, 129, 0.04) 100%)`,
+          }}
+        />
+      )}
+
       {/* Now-playing indicator */}
       {isNowPlaying ? (
-        <span className="w-[11px] h-[11px] flex items-center justify-center">
+        <span className="relative z-10 w-[11px] h-[11px] flex items-center justify-center">
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
         </span>
       ) : isDone ? (
-        <span className="w-[11px] h-[11px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+        <span className="relative z-10 w-[11px] h-[11px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
           <Play size={9} className="text-zinc-400 fill-zinc-400" />
         </span>
       ) : (
-        <TrackIcon status={track.status} />
+        <span className="relative z-10">
+          <TrackIcon status={track.status} />
+        </span>
       )}
 
       {/* Title + artist */}
-      <div className="flex-1 min-w-0">
+      <div className="relative z-10 flex-1 min-w-0">
         <div className="truncate text-xs leading-tight">
-          <span className={isNowPlaying ? 'text-emerald-400' : 'text-zinc-300'}>{track.title}</span>
-          <span className="text-zinc-600"> — {track.artist}</span>
+          <span className={isNowPlaying ? 'text-emerald-400' : isPendingDownload ? 'text-zinc-500' : 'text-zinc-300'}>{track.title}</span>
+          <span className={isPendingDownload ? 'text-zinc-700' : 'text-zinc-600'}> — {track.artist}</span>
         </div>
       </div>
 
-      {isActive && (
+      {isActive && progressStyle === 'inline' && (
         <div className="ml-auto flex shrink-0 items-center justify-end gap-3 pl-3">
           <div className="w-72 shrink-0 flex items-center gap-2">
             <div className="w-10 shrink-0 text-right text-xs text-zinc-600 font-mono tabular-nums">
@@ -127,7 +149,21 @@ export default function TrackRow({ track, downloadId, coverArt, albumName = '', 
         </div>
       )}
 
-      <div className="w-5 shrink-0 flex items-center justify-end">
+      {useBackgroundProgress && (
+        <div className="relative z-10 ml-auto flex shrink-0 items-center justify-end gap-3 pl-3">
+          <div className="w-10 shrink-0 text-right text-xs text-zinc-500 font-mono tabular-nums">
+            {track.progress}%
+          </div>
+          <div className="w-20 shrink-0 text-right font-mono text-xs text-zinc-500 tabular-nums">
+            {showSpeed ? fmtSpeed(track.speed!) : ''}
+          </div>
+          <div className="w-16 shrink-0 text-right font-mono text-xs text-zinc-500 tabular-nums">
+            {showEta ? fmtEta(track.eta!) : ''}
+          </div>
+        </div>
+      )}
+
+      <div className="relative z-10 w-5 shrink-0 flex items-center justify-end">
         {isDone && (
           <button
             className={`shrink-0 transition-opacity ${isFavourited ? 'opacity-100' : 'opacity-0 group-hover:opacity-40 hover:!opacity-100'}`}

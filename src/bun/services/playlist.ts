@@ -8,6 +8,7 @@ import type {
   ContentType,
   DownloadStatus,
 } from '../../shared/types';
+import { normalizeTrackGenres } from '../../shared/track-metadata';
 import { logger } from '../logger';
 import { sanitizeFilename } from './downloader';
 import { paths } from './paths';
@@ -36,6 +37,27 @@ function splitPipeEscaped(s: string): string[] {
   }
   parts.push(current);
   return parts;
+}
+
+function decodeOptionalMetadataField(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  const value = unescPipe(raw).trim();
+  return value ? value : undefined;
+}
+
+function encodeGenresField(genres?: string[]): string {
+  return JSON.stringify(genres ?? []);
+}
+
+function decodeGenresField(raw: string | undefined): string[] | undefined {
+  const value = decodeOptionalMetadataField(raw);
+  if (!value) return undefined;
+
+  try {
+    return normalizeTrackGenres(JSON.parse(value));
+  } catch {
+    return normalizeTrackGenres(value.split(/[;,]/));
+  }
 }
 
 /** Make a relative path from a Playlists/ .m3u to a Library/ audio file. */
@@ -100,10 +122,10 @@ export function savePlaylist(item: DownloadItem): void {
 
   const pending = item.tracks.filter((t) => t.status !== 'done');
   if (pending.length > 0) {
-    lines.push('# Pending tracks (index|trackId|artist|title)');
+    lines.push('# Pending tracks (index|trackId|artist|title|album|genresJson)');
     for (const t of pending) {
       lines.push(
-        `#EXTREEL-PENDING:${t.index}|${t.id}|${escPipe(t.artist)}|${escPipe(t.title)}`
+        `#EXTREEL-PENDING:${t.index}|${t.id}|${escPipe(t.artist)}|${escPipe(t.title)}|${escPipe(t.album ?? '')}|${escPipe(encodeGenresField(t.genres))}`
       );
     }
     lines.push('');
@@ -114,7 +136,7 @@ export function savePlaylist(item: DownloadItem): void {
     lines.push('# Downloaded tracks');
     for (const t of done) {
       lines.push(
-        `#EXTREEL-DONE:${t.index}|${t.id}|${escPipe(t.artist)}|${escPipe(t.title)}`
+        `#EXTREEL-DONE:${t.index}|${t.id}|${escPipe(t.artist)}|${escPipe(t.title)}|${escPipe(t.album ?? '')}|${escPipe(encodeGenresField(t.genres))}`
       );
       lines.push(`#EXTINF:-1,${t.artist} - ${t.title}`);
       lines.push(t.filePath ? toRelativePath(t.filePath) : '');
@@ -177,12 +199,14 @@ function parseM3U(filePath: string): DownloadItem | null {
   let addedAt = new Date().toISOString();
   let coverArt: string | undefined;
 
-  const pendingEntries: { index: number; id: string; artist: string; title: string }[] = [];
+  const pendingEntries: { index: number; id: string; artist: string; title: string; album?: string; genres?: string[] }[] = [];
   const doneEntries: {
     index: number;
     id: string;
     artist: string;
     title: string;
+    album?: string;
+    genres?: string[];
     filePath: string;
   }[] = [];
 
@@ -206,6 +230,8 @@ function parseM3U(filePath: string): DownloadItem | null {
           id: parsed[1],
           artist: unescPipe(parsed[2]),
           title: unescPipe(parsed[3]),
+          album: decodeOptionalMetadataField(parsed[4]),
+          genres: decodeGenresField(parsed[5]),
         });
       }
     } else if (line.startsWith('#EXTREEL-DONE:')) {
@@ -227,6 +253,8 @@ function parseM3U(filePath: string): DownloadItem | null {
           id: parsed[1],
           artist: unescPipe(parsed[2]),
           title: unescPipe(parsed[3]),
+          album: decodeOptionalMetadataField(parsed[4]),
+          genres: decodeGenresField(parsed[5]),
           filePath: trackFilePath,
         });
       }
@@ -249,6 +277,8 @@ function parseM3U(filePath: string): DownloadItem | null {
       index: p.index,
       title: p.title,
       artist: p.artist,
+      album: p.album ?? (type === 'album' ? name : undefined),
+      genres: p.genres,
       status: 'queued',
       progress: 0,
     });
@@ -262,6 +292,8 @@ function parseM3U(filePath: string): DownloadItem | null {
       index: d.index,
       title: d.title,
       artist: d.artist,
+      album: d.album ?? (type === 'album' ? name : undefined),
+      genres: d.genres,
       status: exists ? 'done' : 'queued',
       progress: exists ? 100 : 0,
       filePath: exists ? d.filePath : undefined,

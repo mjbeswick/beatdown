@@ -123,13 +123,13 @@ export default function App() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-zinc-900 overflow-hidden select-none">
+    <div className="flex h-screen min-h-0 flex-col overflow-hidden bg-zinc-900 select-none">
       <Header />
 
-      <div className="flex flex-1 overflow-hidden relative">
+      <div className="relative flex min-h-0 flex-1 overflow-hidden">
         <Sidebar />
 
-        <div className="flex-1 flex overflow-hidden relative">
+        <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
           {nav === 'nowplaying' && (
             <NowPlayingView
               showSidebar={nowPlayingSidebarVisible}

@@ -63,6 +63,16 @@ export const redownloadFx = createEffect((id: string) => {
   return rpc.proxy.request['download:redownload']({ id });
 });
 
+export type PrimaryDownloadAction = 'resume' | 'download';
+
+export function getPrimaryDownloadAction(
+  item: Pick<DownloadItem, 'status' | 'failedTracks'>
+): PrimaryDownloadAction | null {
+  if (item.status === 'paused') return 'resume';
+  if (item.status === 'error' || item.failedTracks > 0) return 'download';
+  return null;
+}
+
 export const pauseDownloadFx = createEffect((id: string) => {
   return rpc.proxy.request['download:pause']({ id });
 });

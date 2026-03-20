@@ -12,6 +12,7 @@ export interface TrackInfo {
   title: string;
   artist: string;
   album?: string;
+  genres?: string[];
   status: TrackStatus;
   progress: number;
   speed?: number;
@@ -48,6 +49,7 @@ export interface SpotifyTrack {
   title: string;
   artist: string;
   album?: string;
+  genres?: string[];
 }
 
 export interface SpotifyContent {
