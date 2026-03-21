@@ -165,7 +165,7 @@ export default function ResizablePaneLayout({
 
   const paneNode = (
     <div
-      className={`relative shrink-0 min-h-0 ${borderClass}`}
+      className={`relative h-full shrink-0 min-h-0 ${borderClass}`}
       style={{
         width: resolvedPaneWidth,
         minWidth: resolvedMinWidth,
@@ -203,10 +203,10 @@ export default function ResizablePaneLayout({
     </div>
   );
 
-  const contentNode = <div className="flex-1 min-w-0 min-h-0 overflow-hidden">{children}</div>;
+  const contentNode = <div className="h-full flex-1 min-w-0 min-h-0 overflow-hidden">{children}</div>;
 
   return (
-    <div ref={containerRef} className="flex flex-1 min-w-0 min-h-0 overflow-hidden">
+    <div ref={containerRef} className="flex h-full flex-1 min-w-0 min-h-0 overflow-hidden">
       {side === 'left' ? paneNode : contentNode}
       {side === 'left' ? contentNode : paneNode}
     </div>

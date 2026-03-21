@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useUnit } from 'effector-react';
 import { Disc3, Play, Music2 } from 'lucide-react';
 import { $downloads, $search } from '../stores/downloads';
 import { $focusedAlbum } from '../stores/nav';
 import { playPlaylist } from '../stores/player';
+import { createFuzzySearchMatcher } from '../lib/search';
 import ResizablePaneLayout from './ResizablePaneLayout';
 import TrackRow from './TrackRow';
 
@@ -12,10 +13,12 @@ export default function AlbumsView() {
   const focusedAlbum = useUnit($focusedAlbum);
   const search = useUnit($search);
 
-  const q = search.trim().toLowerCase();
-  const albums = downloads
-    .filter((d) => d.type === 'album' && d.tracks.length > 0)
-    .filter((d) => !q || d.name.toLowerCase().includes(q));
+  const albums = useMemo(() => {
+    const matchesSearch = createFuzzySearchMatcher(search);
+    return downloads
+      .filter((d) => d.type === 'album' && d.tracks.length > 0)
+      .filter((d) => matchesSearch(d.name));
+  }, [downloads, search]);
 
   const [selectedId, setSelectedId] = useState<string | null>(focusedAlbum ?? null);
   const selected = albums.find((a) => a.id === selectedId) ?? albums[0] ?? null;

@@ -4,6 +4,7 @@ import { fmtSpeed, fmtEta } from './DownloadRow';
 import { useContextMenu } from '../hooks/useContextMenu';
 import ContextMenu from './ContextMenu';
 import { removeTrackFx } from '../stores/downloads';
+import { confirmTrackRemoval } from '../lib/destructiveActionConfirm';
 
 function TrackIcon({ status }: { status: TrackInfo['status'] }) {
   switch (status) {
@@ -107,7 +108,10 @@ export default function TrackRow({ track, downloadId }: Props) {
             {
               label: 'Remove track',
               icon: <Trash2 size={13} />,
-              onClick: () => removeTrackFx({ downloadId, trackId: track.id }),
+              onClick: () => {
+                if (!confirmTrackRemoval(track)) return;
+                removeTrackFx({ downloadId, trackId: track.id });
+              },
               danger: true,
             },
           ]}

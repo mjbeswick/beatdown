@@ -1,13 +1,7 @@
 import { spawn, type ChildProcess } from 'child_process';
 import type { SpotifyContent, SpotifyTrack } from '../../shared/types';
+import { extractYouTubePlaylistId as extractSharedYouTubePlaylistId } from '../../shared/content-source';
 import { logger } from '../logger';
-
-const YOUTUBE_HOSTS = new Set([
-  'youtube.com',
-  'www.youtube.com',
-  'music.youtube.com',
-  'm.youtube.com',
-]);
 
 function getString(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
@@ -40,22 +34,36 @@ interface ThumbnailCandidate {
   score: number;
 }
 
-function collectThumbnailCandidates(value: unknown): ThumbnailCandidate[] {
-  if (!Array.isArray(value)) return [];
+function collectThumbnailCandidates(...sources: unknown[]): ThumbnailCandidate[] {
+  const candidates = new Map<string, ThumbnailCandidate>();
 
-  return value
-    .map((item) => {
-      if (!item || typeof item !== 'object') return null;
+  for (const source of sources) {
+    if (typeof source === 'string') {
+      const url = getString(source);
+      if (url && !candidates.has(url)) candidates.set(url, { url, score: 0 });
+      continue;
+    }
+
+    if (!Array.isArray(source)) continue;
+
+    for (const item of source) {
+      if (!item || typeof item !== 'object') continue;
       const thumbnail = item as Record<string, unknown>;
-      const url = getString(thumbnail['url']);
-      if (!url) return null;
+      const url = getString(thumbnail['url']) ?? getString(thumbnail['thumbnail']);
+      if (!url) continue;
 
       const width = typeof thumbnail['width'] === 'number' ? thumbnail['width'] : 0;
       const height = typeof thumbnail['height'] === 'number' ? thumbnail['height'] : 0;
-      return { url, score: width * height };
-    })
-    .filter((item): item is ThumbnailCandidate => item !== null)
-    .sort((a, b) => b.score - a.score);
+      const score = width * height;
+      const existing = candidates.get(url);
+
+      if (!existing || existing.score < score) {
+        candidates.set(url, { url, score });
+      }
+    }
+  }
+
+  return [...candidates.values()].sort((a, b) => b.score - a.score);
 }
 
 async function canLoadThumbnail(url: string): Promise<boolean> {
@@ -87,8 +95,8 @@ async function canLoadThumbnail(url: string): Promise<boolean> {
   }
 }
 
-async function pickBestThumbnailUrl(value: unknown): Promise<string | undefined> {
-  const thumbnails = collectThumbnailCandidates(value);
+async function pickBestThumbnailUrl(...sources: unknown[]): Promise<string | undefined> {
+  const thumbnails = collectThumbnailCandidates(...sources);
   if (thumbnails.length === 0) return undefined;
 
   for (const thumbnail of thumbnails) {
@@ -181,15 +189,7 @@ function readYtDlpJson(url: string): Promise<Record<string, unknown>> {
 }
 
 export function extractYouTubePlaylistId(url: string): string | null {
-  try {
-    const parsed = new URL(url.trim());
-    if (!YOUTUBE_HOSTS.has(parsed.hostname.toLowerCase())) return null;
-
-    const listId = parsed.searchParams.get('list')?.trim();
-    return listId || null;
-  } catch {
-    return null;
-  }
+  return extractSharedYouTubePlaylistId(url);
 }
 
 export function isYouTubePlaylistUrl(url: string): boolean {
@@ -206,7 +206,8 @@ export async function getYouTubePlaylistContent(url: string): Promise<SpotifyCon
   if (!canonicalUrl) throw new Error('Invalid YouTube Music playlist URL');
 
   const playlist = await readYtDlpJson(canonicalUrl);
-  const tracks = (Array.isArray(playlist['entries']) ? playlist['entries'] : [])
+  const entries = Array.isArray(playlist['entries']) ? playlist['entries'] : [];
+  const tracks = entries
     .map((entry) => parseYouTubeTrack(entry))
     .filter((entry): entry is SpotifyTrack => entry !== null);
 
@@ -215,7 +216,19 @@ export async function getYouTubePlaylistContent(url: string): Promise<SpotifyCon
   }
 
   const name = getString(playlist['title']) ?? 'YouTube Music Playlist';
-  const coverArt = await pickBestThumbnailUrl(playlist['thumbnails']);
+  const entryThumbnailSources = entries
+    .slice(0, 4)
+    .flatMap((entry) => {
+      if (!entry || typeof entry !== 'object') return [];
+      const record = entry as Record<string, unknown>;
+      return [record['thumbnails'], record['thumbnail']];
+    });
+  const coverArt = await pickBestThumbnailUrl(
+    playlist['thumbnails'],
+    playlist['playlist_thumbnails'],
+    playlist['thumbnail'],
+    ...entryThumbnailSources
+  );
 
   logger.info(`Extracted "${name}": ${tracks.length} track(s) from YouTube Music`);
 

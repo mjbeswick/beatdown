@@ -3,7 +3,7 @@ import { rpc } from '../rpc';
 import { loadSettingsFx } from './settingsLoader';
 
 export type PlayerSeekerStyle = 'bar' | 'waveform';
-export type DjMode = 'off' | 'crossfade' | 'beatmatch';
+export type DjMode = 'off' | 'gapless' | 'crossfade' | 'beatmatch';
 
 export const MIN_WAVEFORM_BAR_WIDTH = 1;
 export const MAX_WAVEFORM_BAR_WIDTH = 8;
@@ -11,7 +11,7 @@ export const MIN_WAVEFORM_HEIGHT = 12;
 export const MAX_WAVEFORM_HEIGHT = 32;
 
 export interface AppSettings {
-  confirmTrackDeletion: boolean;
+  confirmDeleteActions: boolean;
   playerSeekerStyle: PlayerSeekerStyle;
   waveformHeight: number;
   waveformBarWidth: number;
@@ -20,10 +20,15 @@ export interface AppSettings {
   waveformBarFullRounding: boolean;
   djMode: DjMode;
   crossfadeDuration: number; // seconds, 2–16
+  maxConcurrentDownloads: number; // 1–6
 }
 
+type PersistedAppSettings = Partial<AppSettings> & {
+  confirmTrackDeletion?: boolean;
+};
+
 const DEFAULT_SETTINGS: AppSettings = {
-  confirmTrackDeletion: true,
+  confirmDeleteActions: true,
   playerSeekerStyle: 'bar',
   waveformHeight: 18,
   waveformBarWidth: 2,
@@ -32,6 +37,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   waveformBarFullRounding: false,
   djMode: 'off',
   crossfadeDuration: 8,
+  maxConcurrentDownloads: 3,
 };
 
 function clamp(value: number, min: number, max: number): number {
@@ -55,7 +61,7 @@ function sanitizePlayerSeekerStyle(value: unknown): PlayerSeekerStyle {
   return value === 'waveform' ? 'waveform' : DEFAULT_SETTINGS.playerSeekerStyle;
 }
 
-function sanitizeSettings(input: Partial<AppSettings> | null | undefined): AppSettings {
+function sanitizeSettings(input: PersistedAppSettings | null | undefined): AppSettings {
   const barWidth =
     typeof input?.waveformBarWidth === 'number'
       ? clamp(input.waveformBarWidth, MIN_WAVEFORM_BAR_WIDTH, MAX_WAVEFORM_BAR_WIDTH)
@@ -65,11 +71,14 @@ function sanitizeSettings(input: Partial<AppSettings> | null | undefined): AppSe
     typeof input?.waveformBarRadius === 'number'
       ? clamp(input.waveformBarRadius, 0, maxRadius)
       : clamp(DEFAULT_SETTINGS.waveformBarRadius, 0, maxRadius);
-  return {
-    confirmTrackDeletion:
-      typeof input?.confirmTrackDeletion === 'boolean'
+  const confirmDeleteActions =
+    typeof input?.confirmDeleteActions === 'boolean'
+      ? input.confirmDeleteActions
+      : typeof input?.confirmTrackDeletion === 'boolean'
         ? input.confirmTrackDeletion
-        : DEFAULT_SETTINGS.confirmTrackDeletion,
+        : DEFAULT_SETTINGS.confirmDeleteActions;
+  return {
+    confirmDeleteActions,
     playerSeekerStyle: sanitizePlayerSeekerStyle(input?.playerSeekerStyle),
     waveformHeight:
       typeof input?.waveformHeight === 'number'
@@ -86,13 +95,17 @@ function sanitizeSettings(input: Partial<AppSettings> | null | undefined): AppSe
         ? input.waveformBarFullRounding
         : maxRadius > 0 && barRadius === maxRadius,
     djMode:
-      input?.djMode === 'crossfade' || input?.djMode === 'beatmatch'
+      input?.djMode === 'gapless' || input?.djMode === 'crossfade' || input?.djMode === 'beatmatch'
         ? input.djMode
         : DEFAULT_SETTINGS.djMode,
     crossfadeDuration:
       typeof input?.crossfadeDuration === 'number'
         ? clamp(input.crossfadeDuration, 2, 16)
         : DEFAULT_SETTINGS.crossfadeDuration,
+    maxConcurrentDownloads:
+      typeof input?.maxConcurrentDownloads === 'number'
+        ? clamp(input.maxConcurrentDownloads, 1, 6)
+        : DEFAULT_SETTINGS.maxConcurrentDownloads,
   };
 }
 
@@ -111,13 +124,13 @@ function applyPatch(state: AppSettings, patch: Partial<AppSettings>): AppSetting
 }
 
 export const patchAppSettings = createEvent<Partial<AppSettings>>();
-export const setConfirmTrackDeletion = createEvent<boolean>();
+export const setConfirmDeleteActions = createEvent<boolean>();
 
 export const $appSettings = createStore<AppSettings>(loadSettings())
   .on(loadSettingsFx.doneData, (state, data) =>
-    data.appSettings ? sanitizeSettings(data.appSettings as Partial<AppSettings>) : state
+    data.appSettings ? sanitizeSettings(data.appSettings as PersistedAppSettings) : state
   )
   .on(patchAppSettings, (state, patch) => applyPatch(state, patch))
-  .on(setConfirmTrackDeletion, (state, confirmTrackDeletion) =>
-    applyPatch(state, { confirmTrackDeletion })
+  .on(setConfirmDeleteActions, (state, confirmDeleteActions) =>
+    applyPatch(state, { confirmDeleteActions })
   );

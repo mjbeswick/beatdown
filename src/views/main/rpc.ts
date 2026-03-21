@@ -3,8 +3,8 @@ import type { BeatdownRPCSchema, BeatdownViewLocalSchema, BeatdownViewRemoteSche
 
 export type { BeatdownRPCSchema };
 
-// Browser side: we HANDLE webview.requests (empty) and CALL bun.requests
-// We RECEIVE bun.messages and SEND webview.messages (empty)
+// Browser side: we HANDLE webview.requests (empty), SEND webview.messages (empty),
+// CALL bun.requests, and RECEIVE bun.messages.
 export const rpc = createRPC<BeatdownViewLocalSchema, BeatdownViewRemoteSchema>({
   maxRequestTime: 30000,
   requestHandler: {},

@@ -1,9 +1,9 @@
-import { AudioWaveform, FolderOpen, Music, Gauge, Trash2 } from 'lucide-react';
+import { AudioWaveform, FolderOpen, Music, Gauge, Trash2, Layers } from 'lucide-react';
 import { useUnit } from 'effector-react';
 import { usePersistedState } from '../hooks/usePersistedState';
 import { useEffect, useState } from 'react';
 import { $theme, themeChanged } from '../stores/theme';
-import { $appSettings, setConfirmTrackDeletion } from '../stores/appSettings';
+import { $appSettings, setConfirmDeleteActions, patchAppSettings } from '../stores/appSettings';
 import type { AudioFormat, QualityPreset } from '../../../shared/types';
 import type { BeatdownPaths } from '../../../shared/rpc-schema';
 import { rpc } from '../rpc';
@@ -28,6 +28,10 @@ import {
   invalidateVisualizerPresetCatalog,
   loadVisualizerPresetCatalog,
 } from '../lib/visualizer';
+import {
+  confirmVisualizerFavoritesReset,
+  confirmVisualizerPresetFolderClear,
+} from '../lib/destructiveActionConfirm';
 import WaveformSettingsCard from './WaveformSettingsCard';
 import DjSettingsCard from './DjSettingsCard';
 
@@ -215,15 +219,35 @@ export default function SettingsView() {
             </div>
           </div>
 
+          {/* Parallel downloads */}
+          <div className="flex items-center justify-between px-4 py-2.5 border-t border-zinc-700/40">
+            <div className="flex items-center gap-2">
+              <Layers size={13} className="text-zinc-500" />
+              <span className="text-zinc-300 text-sm">Parallel downloads</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="range"
+                min={1}
+                max={6}
+                step={1}
+                value={appSettings.maxConcurrentDownloads}
+                onChange={(e) => patchAppSettings({ maxConcurrentDownloads: Number(e.target.value) })}
+                className="w-24 accent-emerald-500 cursor-pointer"
+              />
+              <span className="text-zinc-400 text-xs w-4 text-right">{appSettings.maxConcurrentDownloads}</span>
+            </div>
+          </div>
+
           <div className="flex items-center justify-between px-4 py-2.5 border-t border-zinc-700/40">
             <div className="flex items-center gap-2">
               <Trash2 size={13} className="text-zinc-500" />
-              <span className="text-zinc-300 text-sm">Confirm before removing tracks</span>
+                <span className="text-zinc-300 text-sm">Confirm before deleting tracks or playlists</span>
             </div>
             <input
               type="checkbox"
-              checked={appSettings.confirmTrackDeletion}
-              onChange={(e) => setConfirmTrackDeletion(e.target.checked)}
+              checked={appSettings.confirmDeleteActions}
+              onChange={(e) => setConfirmDeleteActions(e.target.checked)}
               className="h-4 w-4 accent-emerald-500 cursor-pointer"
             />
           </div>
@@ -315,6 +339,7 @@ export default function SettingsView() {
               {reelPaths?.visualizerPresetsDir && (
                 <button
                   onClick={async () => {
+                    if (!confirmVisualizerPresetFolderClear()) return;
                     const updated = await rpc.proxy.request['visualizer-presets:clear-folder'](undefined as never).catch(() => null);
                     if (updated) {
                       invalidateVisualizerPresetCatalog();
@@ -412,7 +437,10 @@ export default function SettingsView() {
               </span>
               {favoritePresetCount > 0 && (
                 <button
-                  onClick={() => resetVisualizerFavorites()}
+                  onClick={() => {
+                    if (!confirmVisualizerFavoritesReset(favoritePresetCount)) return;
+                    resetVisualizerFavorites();
+                  }}
                   className="text-zinc-500 hover:text-zinc-300 bg-zinc-700/60 border border-zinc-600/50 rounded px-1.5 py-0.5 transition-colors text-[10px]"
                   title="Clear all favorites"
                 >

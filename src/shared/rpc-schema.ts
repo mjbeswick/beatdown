@@ -90,14 +90,26 @@ export interface BeatdownRPCSchema {
   };
 }
 
-/** LocalSchema for the webview side (receives bun messages, handles no requests) */
+/** Local schema for the webview side: handles webview requests and sends webview messages. */
 export type BeatdownViewLocalSchema = {
   requests: BeatdownRPCSchema['webview']['requests'];
+  messages: BeatdownRPCSchema['webview']['messages'];
+};
+
+/** Remote schema for the webview side: calls bun requests and receives bun messages. */
+export type BeatdownViewRemoteSchema = {
+  requests: BeatdownRPCSchema['bun']['requests'];
   messages: BeatdownRPCSchema['bun']['messages'];
 };
 
-/** RemoteSchema for the webview side (calls bun requests, sends no messages) */
-export type BeatdownViewRemoteSchema = {
+/** Local schema for the bun side: handles bun requests and sends bun messages. */
+export type BeatdownBunLocalSchema = {
   requests: BeatdownRPCSchema['bun']['requests'];
+  messages: BeatdownRPCSchema['bun']['messages'];
+};
+
+/** Remote schema for the bun side: calls webview requests and receives webview messages. */
+export type BeatdownBunRemoteSchema = {
+  requests: BeatdownRPCSchema['webview']['requests'];
   messages: BeatdownRPCSchema['webview']['messages'];
 };

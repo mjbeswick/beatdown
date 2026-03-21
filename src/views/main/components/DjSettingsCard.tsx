@@ -9,6 +9,7 @@ interface Props {
 
 const DJ_MODES: { value: DjMode; label: string; description: string }[] = [
   { value: 'off', label: 'Off', description: '' },
+  { value: 'gapless', label: 'Gapless', description: 'Preloads the next track for seamless, gap-free transitions' },
   { value: 'crossfade', label: 'Crossfade', description: 'Smooth gain fade between tracks' },
   {
     value: 'beatmatch',
@@ -67,8 +68,8 @@ export default function DjSettingsCard({
         </p>
       )}
 
-      {/* Crossfade duration — only shown when a mode is active */}
-      {settings.djMode !== 'off' && (
+      {/* Crossfade duration — only shown for crossfade/beatmatch modes */}
+      {settings.djMode !== 'off' && settings.djMode !== 'gapless' && (
         <div className="px-4 py-3 border-t border-zinc-700/40">
           <div className="flex items-center justify-between mb-2">
             <span className="text-zinc-300 text-sm">Crossfade duration</span>

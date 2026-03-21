@@ -134,6 +134,10 @@ export function swapDecks(nextTrackId: string, nextSrc: string): void {
   lastSrc = nextSrc;
 }
 
+export function getLoadedTrackId(): string | null {
+  return lastTrackId;
+}
+
 export function setCrossfadeInProgress(v: boolean): void {
   crossfadeInProgress = v;
 }

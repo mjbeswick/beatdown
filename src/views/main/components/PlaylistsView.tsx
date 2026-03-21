@@ -6,6 +6,7 @@ import { enqueueTrack, playDownloadPlaylist } from '../stores/player';
 import type { DownloadItem, DownloadStatus } from '../../../shared/types';
 import { getTrackAlbumName } from '../../../shared/track-metadata';
 import { rpc } from '../rpc';
+import { createFuzzySearchMatcher } from '../lib/search';
 import ContextMenu, { type ContextMenuEntry } from './ContextMenu';
 import { useContextMenu } from '../hooks/useContextMenu';
 import ResizablePaneLayout from './ResizablePaneLayout';
@@ -124,13 +125,6 @@ function PlaylistListStatus({ status }: { status: DownloadStatus }) {
           Queued
         </span>
       );
-    case 'paused':
-      return (
-        <span className="inline-flex items-center gap-1 text-[10px] text-amber-400">
-          <Pause size={10} />
-          Paused
-        </span>
-      );
     default:
       return null;
   }
@@ -245,10 +239,10 @@ export default function PlaylistsView() {
   const downloads = useUnit($downloads);
   const search = useUnit($search);
 
-  const q = search.trim().toLowerCase();
+  const matchesSearch = createFuzzySearchMatcher(search);
   const playlists = downloads
     .filter((d) => d.type === 'playlist' && d.tracks.length > 0)
-    .filter((d) => !q || d.name.toLowerCase().includes(q));
+    .filter((d) => matchesSearch(d.name));
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = playlists.find((p) => p.id === selectedId) ?? playlists[0] ?? null;

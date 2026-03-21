@@ -11,6 +11,7 @@ import type {
   TrackInfo,
   TrackStatus,
 } from '../../shared/types';
+import { getContentSourceIdentity } from '../../shared/content-source';
 import { getTrackAlbumName } from '../../shared/track-metadata';
 import {
   downloadTrack,
@@ -24,7 +25,6 @@ import { logger } from '../logger';
 import { savePlaylist, deletePlaylist, loadAllPlaylists, calculateSizeOnDiskBytes } from './playlist';
 import { paths } from './paths';
 
-const CONCURRENCY = 3;
 const MAX_RETRIES = 2;
 const RETRY_DELAYS_MS = [2000, 8000];
 
@@ -58,8 +58,21 @@ export class DownloadQueue extends EventEmitter {
   private items = new Map<string, DownloadItem>();
   private abortControllers = new Map<string, AbortController>();
   private activeCount = 0;
+  private concurrency = 3;
   private pendingTracks: Array<{ downloadId: string; track: TrackInfo; attempt: number }> = [];
   private pausedDownloads = new Set<string>();
+
+  private findExistingPlaylistBySource(url: string): DownloadItem | undefined {
+    const sourceIdentity = getContentSourceIdentity(url);
+    if (!sourceIdentity) return undefined;
+
+    for (const item of this.items.values()) {
+      if (item.type !== 'playlist') continue;
+      if (getContentSourceIdentity(item.url) === sourceIdentity) return item;
+    }
+
+    return undefined;
+  }
 
   private isExcludedTrack(
     itemId: string,
@@ -224,6 +237,14 @@ export class DownloadQueue extends EventEmitter {
     format: AudioFormat,
     quality: QualityPreset
   ): Promise<DownloadItem> {
+    if (content.type === 'playlist') {
+      const existingItem = this.findExistingPlaylistBySource(url);
+      if (existingItem) {
+        logger.info(`Skipping duplicate playlist add for "${content.name}"`);
+        return existingItem;
+      }
+    }
+
     const id = uuidv4();
 
     const tracks: TrackInfo[] = content.tracks.map((t, i) => ({
@@ -514,8 +535,13 @@ export class DownloadQueue extends EventEmitter {
     }
   }
 
+  setConcurrency(n: number): void {
+    this.concurrency = Math.max(1, Math.min(6, Math.round(n)));
+    this.drain();
+  }
+
   private drain(): void {
-    while (this.activeCount < CONCURRENCY && this.pendingTracks.length > 0) {
+    while (this.activeCount < this.concurrency && this.pendingTracks.length > 0) {
       const next = this.pendingTracks[0];
       if (this.pausedDownloads.has(next.downloadId)) {
         this.pendingTracks.shift();

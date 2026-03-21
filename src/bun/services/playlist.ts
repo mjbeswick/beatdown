@@ -111,6 +111,7 @@ export function savePlaylist(item: DownloadItem): void {
   lines.push('#EXTM3U');
   lines.push('');
   lines.push(`#EXTREEL-ID:${item.id}`);
+  lines.push(`#EXTREEL-NAME:${item.name}`);
   lines.push(`#EXTREEL-URL:${item.url}`);
   lines.push(`#EXTREEL-TYPE:${item.type}`);
   lines.push(`#EXTREEL-STATUS:${item.status}`);
@@ -151,11 +152,36 @@ export function savePlaylist(item: DownloadItem): void {
   }
 }
 
-export function deletePlaylist(item: DownloadItem): void {
-  const fileName = sanitizeFilename(item.name) + '.m3u';
-  const filePath = path.join(paths.playlistsDir, fileName);
+function findPlaylistFilePath(item: Pick<DownloadItem, 'id' | 'name' | 'url'>): string | null {
+  const byName = path.join(paths.playlistsDir, `${sanitizeFilename(item.name)}.m3u`);
+  if (fs.existsSync(byName)) return byName;
+
+  let files: string[];
   try {
-    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    files = fs.readdirSync(paths.playlistsDir).filter((file) => file.endsWith('.m3u'));
+  } catch {
+    return null;
+  }
+
+  for (const file of files) {
+    const filePath = path.join(paths.playlistsDir, file);
+    try {
+      const content = fs.readFileSync(filePath, 'utf8');
+      if (content.includes(`#EXTREEL-ID:${item.id}`) || content.includes(`#EXTREEL-URL:${item.url}`)) {
+        return filePath;
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
+}
+
+export function deletePlaylist(item: DownloadItem): void {
+  const filePath = findPlaylistFilePath(item);
+  try {
+    if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
   } catch (err) {
     logger.error(`Failed to delete playlist for "${item.name}"`, (err as Error).message);
   }
@@ -191,6 +217,7 @@ function parseM3U(filePath: string): DownloadItem | null {
   const lines = content.split('\n');
 
   let id = '';
+  let storedName: string | undefined;
   let url = '';
   let type: ContentType = 'playlist';
   let status: DownloadStatus = 'queued';
@@ -224,6 +251,7 @@ function parseM3U(filePath: string): DownloadItem | null {
     const line = lines[i].trim();
 
     if (line.startsWith('#EXTREEL-ID:')) id = line.slice('#EXTREEL-ID:'.length);
+    else if (line.startsWith('#EXTREEL-NAME:')) storedName = line.slice('#EXTREEL-NAME:'.length);
     else if (line.startsWith('#EXTREEL-URL:')) url = line.slice('#EXTREEL-URL:'.length);
     else if (line.startsWith('#EXTREEL-TYPE:')) type = line.slice('#EXTREEL-TYPE:'.length) as ContentType;
     else if (line.startsWith('#EXTREEL-STATUS:')) status = line.slice('#EXTREEL-STATUS:'.length) as DownloadStatus;
@@ -275,7 +303,7 @@ function parseM3U(filePath: string): DownloadItem | null {
 
   if (!id || !url) return null;
 
-  const name = path.basename(filePath, '.m3u');
+  const name = storedName?.trim() || path.basename(filePath, '.m3u');
 
   // outputDir is the Library dir (for backward compat), but files are under Library/{Artist}/
   const outputDir = paths.libraryDir;

@@ -1,8 +1,8 @@
 import { createStore, createEvent, createEffect, combine } from 'effector';
 import { rpc } from '../rpc';
 import { navChanged } from './nav';
-import { $appSettings } from './appSettings';
 import type { DownloadItem, AddDownloadParams, SpotifyContent } from '../../../shared/types';
+import { confirmDownloadRemoval, confirmTrackRemoval } from '../lib/destructiveActionConfirm';
 
 export type FilterType = 'all' | 'active' | 'done' | 'error';
 export type AddPhase = 'idle' | 'fetching' | 'error';
@@ -43,18 +43,17 @@ export const $preview = createStore<PreviewPhase | null>(null)
   .reset(previewClosed)
   .reset(addDownloadFx.done);
 
-export const removeDownloadFx = createEffect((id: string) => {
+export const removeDownloadFx = createEffect(async (id: string) => {
+  const item = $downloads.getState().find((download) => download.id === id);
+  if (!confirmDownloadRemoval(item)) return;
+
   return rpc.proxy.request['download:remove']({ id });
 });
 
 export const removeTrackFx = createEffect(async ({ downloadId, trackId }: { downloadId: string; trackId: string }) => {
-  if ($appSettings.getState().confirmTrackDeletion) {
-    const item = $downloads.getState().find((download) => download.id === downloadId);
-    const track = item?.tracks.find((entry) => entry.id === trackId);
-    const label = track ? `"${track.title}" by ${track.artist}` : 'this track';
-    const confirmed = window.confirm(`Remove ${label} from your library?`);
-    if (!confirmed) return;
-  }
+  const item = $downloads.getState().find((download) => download.id === downloadId);
+  const track = item?.tracks.find((entry) => entry.id === trackId);
+  if (!confirmTrackRemoval(track)) return;
 
   return rpc.proxy.request['track:remove']({ downloadId, trackId });
 });

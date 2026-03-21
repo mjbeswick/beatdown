@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useUnit } from 'effector-react';
 import { Mic2, Play } from 'lucide-react';
 import { $downloads, $search } from '../stores/downloads';
 import { $focusedArtist } from '../stores/nav';
 import { playPlaylist } from '../stores/player';
 import { getTrackAlbumName } from '../../../shared/track-metadata';
+import { createFuzzySearchMatcher } from '../lib/search';
 import ResizablePaneLayout from './ResizablePaneLayout';
 import TrackRow from './TrackRow';
 import type { TrackInfo } from '../../../shared/types';
@@ -14,25 +15,30 @@ export default function ArtistsView() {
   const focusedArtist = useUnit($focusedArtist);
   const search = useUnit($search);
 
-  const artistMap = new Map<string, Array<{ track: TrackInfo; downloadId: string; coverArt?: string; albumName: string }>>();
-  for (const item of downloads) {
-    for (const track of item.tracks) {
-      if (track.status === 'done') {
-        if (!artistMap.has(track.artist)) artistMap.set(track.artist, []);
-        artistMap.get(track.artist)!.push({
-          track,
-          downloadId: item.id,
-          coverArt: item.coverArt,
-          albumName: getTrackAlbumName(track, item.name),
-        });
+  const artistMap = useMemo(() => {
+    const map = new Map<string, Array<{ track: TrackInfo; downloadId: string; coverArt?: string; albumName: string }>>();
+    for (const item of downloads) {
+      for (const track of item.tracks) {
+        if (track.status === 'done') {
+          if (!map.has(track.artist)) map.set(track.artist, []);
+          map.get(track.artist)!.push({
+            track,
+            downloadId: item.id,
+            coverArt: item.coverArt,
+            albumName: getTrackAlbumName(track, item.name),
+          });
+        }
       }
     }
-  }
+    return map;
+  }, [downloads]);
 
-  const q = search.trim().toLowerCase();
-  const artists = [...artistMap.entries()]
-    .filter(([artist]) => !q || artist.toLowerCase().includes(q))
-    .sort((a, b) => a[0].localeCompare(b[0]));
+  const artists = useMemo(() => {
+    const matchesSearch = createFuzzySearchMatcher(search);
+    return [...artistMap.entries()]
+      .filter(([artist]) => matchesSearch(artist))
+      .sort((a, b) => a[0].localeCompare(b[0]));
+  }, [artistMap, search]);
 
   const [selectedArtist, setSelectedArtist] = useState<string | null>(focusedArtist ?? null);
   const resolvedArtist = (selectedArtist && artistMap.has(selectedArtist) ? selectedArtist : artists[0]?.[0]) ?? null;

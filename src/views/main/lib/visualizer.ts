@@ -129,7 +129,7 @@ function loadStockVisualizerPresets(): Record<string, unknown> {
     stockPresetCache = {};
   }
 
-  return stockPresetCache;
+  return stockPresetCache ?? {};
 }
 
 function getStockVisualizerPresetDescriptors(): VisualizerPresetDescriptor[] {

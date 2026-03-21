@@ -1,5 +1,6 @@
 import { useUnit } from 'effector-react';
 import { $filteredDownloads, $showResumeBanner, resumeBannerDismissed, resumeInterruptedFx } from '../stores/downloads';
+import { createFuzzySearchMatcher } from '../lib/search';
 import DownloadRow from './DownloadRow';
 import { Music2, RefreshCw, X } from 'lucide-react';
 
@@ -10,9 +11,8 @@ interface Props {
 export default function DownloadList({ searchQuery = '' }: Props) {
   const allDownloads = useUnit($filteredDownloads);
   const showResumeBanner = useUnit($showResumeBanner);
-  const downloads = searchQuery
-    ? allDownloads.filter((d) => d.name.toLowerCase().includes(searchQuery.toLowerCase()))
-    : allDownloads;
+  const matchesSearch = createFuzzySearchMatcher(searchQuery);
+  const downloads = allDownloads.filter((d) => matchesSearch(d.name));
 
   return (
     <main className="flex-1 flex flex-col overflow-hidden">

@@ -1,6 +1,7 @@
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 import type { ContentType, SpotifyContent, SpotifyTrack } from '../../shared/types';
+import { extractSpotifyContentRef } from '../../shared/content-source';
 import { logger } from '../logger';
 
 const USER_AGENT =
@@ -26,13 +27,12 @@ const fullPageHttp = axios.create({
 });
 
 export function validateUrl(url: string): boolean {
-  return /open\.spotify\.com\/(track|album|playlist)\/[a-zA-Z0-9]+/.test(url);
+  return extractSpotifyContentRef(url) !== null;
 }
 
 export function extractSpotifyId(url: string): { type: ContentType; id: string } | null {
-  const match = url.match(/open\.spotify\.com\/(track|album|playlist)\/([a-zA-Z0-9]+)/);
-  if (!match) return null;
-  return { type: match[1] as ContentType, id: match[2] };
+  const parsed = extractSpotifyContentRef(url);
+  return parsed ? { type: parsed.type as ContentType, id: parsed.id } : null;
 }
 
 type ExtractedSpotifyTrack = SpotifyTrack & {

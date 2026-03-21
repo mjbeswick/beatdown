@@ -22,6 +22,8 @@ import { navToAlbum, navToArtist, navChanged } from '../stores/nav';
 import { $favourites, toggleFavourite } from '../stores/favourites';
 import { $search, removeTrackFx } from '../stores/downloads';
 import { rpc } from '../rpc';
+import { createFuzzySearchMatcher } from '../lib/search';
+import { confirmQueueRemoval } from '../lib/destructiveActionConfirm';
 import type { LyricLine } from '../../../shared/types';
 import ContextMenu, { type ContextMenuEntry } from './ContextMenu';
 import ResizablePaneLayout from './ResizablePaneLayout';
@@ -156,12 +158,12 @@ export default function NowPlayingView({
 
   const activeLine = getActiveLine();
   const isFav = current ? favourites.includes(current.track.id) : false;
-  const normalizedSearch = search.trim().toLowerCase();
+  const matchesSearch = createFuzzySearchMatcher(search);
   const visibleQueue = player.queue
     .map((item, queueIdx) => ({ item, queueIdx }))
     .filter(({ item, queueIdx }) => {
       if (queueIdx === player.queueIndex) return true;
-      return !normalizedSearch || item.track.title.toLowerCase().includes(normalizedSearch);
+      return matchesSearch(item.track.title);
     });
 
   useLayoutEffect(() => {
@@ -177,7 +179,14 @@ export default function NowPlayingView({
 
     activeQueueItem.scrollIntoView({ behavior, block: 'center' });
     lastQueueScrollTrackIdRef.current = current.track.id;
-  }, [current, normalizedSearch, player.queue.length, player.queueIndex, showSidebar, tab]);
+  }, [current, player.queue.length, player.queueIndex, search, showSidebar, tab]);
+
+  const removeQueueTrack = (queueIdx: number) => {
+    const queued = player.queue[queueIdx];
+    if (!queued) return;
+    if (!confirmQueueRemoval(queued.track)) return;
+    removeFromQueue(queueIdx);
+  };
 
   if (!current) {
     return (
@@ -357,7 +366,7 @@ export default function NowPlayingView({
                         <Pause size={14} />
                       </button>
                       <button
-                        onClick={() => removeFromQueue(queueIdx)}
+                        onClick={() => removeQueueTrack(queueIdx)}
                         className="text-zinc-500 transition-colors hover:text-red-400"
                         aria-label="Remove current track from queue"
                       >
@@ -374,7 +383,7 @@ export default function NowPlayingView({
                         <Play size={14} className="fill-current" />
                       </button>
                       <button
-                        onClick={() => removeFromQueue(queueIdx)}
+                        onClick={() => removeQueueTrack(queueIdx)}
                         className="text-zinc-600 transition-colors hover:text-red-400"
                         aria-label="Remove from queue"
                       >
@@ -502,7 +511,7 @@ export default function NowPlayingView({
       </div>
 
       <div
-        className="flex min-h-full w-full flex-col items-center justify-center"
+        className="flex h-full min-h-full w-full flex-col items-center justify-center"
         style={{
           gap: 'clamp(1.1rem, 2.6vmin, 2rem)',
           paddingInline: 'clamp(1rem, 4vmin, 3.25rem)',

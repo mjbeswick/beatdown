@@ -1,6 +1,7 @@
 import { useUnit } from 'effector-react';
 import { X, Download, Music2, Disc3, ListMusic, Loader2, AlertCircle } from 'lucide-react';
-import { $preview, previewClosed, addDownloadFx } from '../stores/downloads';
+import { getContentSourceIdentity } from '../../../shared/content-source';
+import { $downloads, $preview, previewClosed, addDownloadFx } from '../stores/downloads';
 import { usePersistedState } from '../hooks/usePersistedState';
 import type { AudioFormat, QualityPreset } from '../../../shared/types';
 
@@ -17,14 +18,21 @@ const TYPE_ICON: Record<string, React.ElementType> = {
 };
 
 export default function DownloadPreviewModal() {
-  const preview = useUnit($preview);
+  const [preview, downloads, isAdding] = useUnit([$preview, $downloads, addDownloadFx.pending]);
   const [format] = usePersistedState<AudioFormat>('reel:format', 'm4a');
   const [quality] = usePersistedState<QualityPreset>('reel:quality', 'auto');
 
   if (!preview) return null;
 
+  const duplicatePlaylist =
+    preview.phase === 'ready' && preview.data.type === 'playlist'
+      ? downloads.find((item) => getContentSourceIdentity(item.url) === getContentSourceIdentity(preview.url))
+      : undefined;
+
+  const isDuplicatePlaylist = Boolean(duplicatePlaylist);
+
   const handleDownload = () => {
-    if (preview.phase !== 'ready') return;
+    if (preview.phase !== 'ready' || isAdding || isDuplicatePlaylist) return;
     addDownloadFx({ url: preview.url, format, quality });
   };
 
@@ -78,6 +86,12 @@ export default function DownloadPreviewModal() {
         {preview.phase === 'ready' && (() => {
           const { data } = preview;
           const Icon = TypeIcon;
+          const buttonLabel = isAdding
+            ? 'Adding...'
+            : isDuplicatePlaylist
+              ? 'Already Added'
+              : 'Download';
+
           return (
             <>
               {/* Cover art */}
@@ -107,10 +121,15 @@ export default function DownloadPreviewModal() {
 
                 <button
                   onClick={handleDownload}
-                  className="w-full flex items-center justify-center gap-2 bg-emerald-700 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                  disabled={isAdding || isDuplicatePlaylist}
+                  className="w-full flex items-center justify-center gap-2 bg-emerald-700 hover:bg-emerald-600 disabled:bg-zinc-700 disabled:text-zinc-400 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
                 >
-                  <Download size={14} />
-                  Download
+                  {isAdding ? (
+                    <Loader2 size={14} className="animate-spin" />
+                  ) : (
+                    <Download size={14} />
+                  )}
+                  {buttonLabel}
                 </button>
               </div>
             </>

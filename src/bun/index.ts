@@ -1,7 +1,7 @@
-import Electrobun, { BrowserWindow, defineElectrobunRPC, Utils, ApplicationMenu } from 'electrobun/bun';
+import Electrobun, { BrowserWindow, createRPC, Utils, ApplicationMenu } from 'electrobun/bun';
 import type { DownloadItem, LyricLine } from '../shared/types';
 import type { AddDownloadParams } from '../shared/types';
-import type { BeatdownRPCSchema } from '../shared/rpc-schema';
+import type { BeatdownBunLocalSchema, BeatdownBunRemoteSchema } from '../shared/rpc-schema';
 import { queue } from './services/queue';
 import { getContent } from './services/content';
 import { getLyrics } from './services/lyrics';
@@ -201,182 +201,186 @@ logger.info(`Stream server listening on port ${streamPort}`);
 
 // ── RPC instance ──────────────────────────────────────────────────────────────
 
-const rpc = defineElectrobunRPC<BeatdownRPCSchema, 'bun'>('bun', {
-  handlers: {
-    requests: {
-      'download:preview': async ({ url }) => {
-        return await getContent(url);
-      },
-
-      'download:add': async ({ url, format, quality }) => {
-        rpc.proxy.send['download:fetching'](undefined as any);
-        try {
-          const content = await getContent(url);
-          rpc.proxy.send['download:fetch_done'](undefined as any);
-          return await queue.add(content, url, format, quality);
-        } catch (err) {
-          rpc.proxy.send['download:error']({ message: (err as Error).message });
-          throw err;
-        }
-      },
-
-      'download:remove': ({ id }) => {
-        queue.remove(id);
-      },
-
-      'track:remove': ({ downloadId, trackId }) => {
-        queue.removeTrack(downloadId, trackId);
-      },
-
-      'download:redownload': ({ id }) => {
-        queue.redownload(id);
-      },
-
-      'download:pause': ({ id }) => {
-        queue.pause(id);
-      },
-
-      'download:resume': ({ id }) => {
-        queue.resume(id);
-      },
-
-      'downloads:getAll': () => {
-        return queue.getAll();
-      },
-
-      'downloads:retryFailed': () => {
-        queue.retryAllFailed();
-      },
-
-      'downloads:resumeInterrupted': () => {
-        const count = queue.resumeInterrupted();
-        return { count };
-      },
-
-      'app:openExternal': ({ url }) => {
-        return Utils.openExternal(url);
-      },
-
-      'app:forceQuit': () => {
-        isForceQuitting = true;
-        process.exit(0);
-      },
-
-      'app:cancelClose': () => {
-        // no-op: close confirmation is now handled natively via showMessageBox
-      },
-
-      'stream:getUrl': ({ filePath }) => {
-        return `http://${STREAM_HOST}:${streamPort}/stream?path=${encodeURIComponent(filePath)}`;
-      },
-
-      'stream:getPort': () => streamPort,
-
-      'lyrics:get': ({ artist, title }) => {
-        return getLyrics(artist, title);
-      },
-
-      'window:zoom': () => {
-        if (win.isMaximized()) {
-          win.unmaximize();
-        } else {
-          win.maximize();
-        }
-      },
-
-      'paths:get': () => {
-        return paths.getAll();
-      },
-
-      'cast:discover': async () => {
-        const devices = await discoverDevices(4000);
-        castDevices.clear();
-        for (const d of devices) castDevices.set(d.id, d);
-        return devices;
-      },
-
-      'cast:start': async ({ deviceId, streamPath, title, artist }) => {
-        const device = castDevices.get(deviceId);
-        if (!device) throw new Error(`Unknown cast device: ${deviceId}`);
-        const lanIp = getLanIp();
-        const streamUrl = `http://${lanIp}:${streamPort}/stream?path=${encodeURIComponent(streamPath)}`;
-        await castTrack(device, streamUrl, title, artist);
-      },
-
-      'cast:stop': async ({ deviceId }) => {
-        const device = castDevices.get(deviceId);
-        if (!device) return;
-        await stopCast(device);
-      },
-
-      'cast:pause': async ({ deviceId }) => {
-        const device = castDevices.get(deviceId);
-        if (!device) return;
-        await pauseCast(device);
-      },
-
-      'cast:resume': async ({ deviceId }) => {
-        const device = castDevices.get(deviceId);
-        if (!device) return;
-        await resumeCast(device);
-      },
-
-      'cast:seek': async ({ deviceId, seconds }) => {
-        const device = castDevices.get(deviceId);
-        if (!device) return;
-        await seekCast(device, seconds);
-      },
-
-      'settings:load': () => {
-        return appConfig.load();
-      },
-
-      'settings:save': ({ key, value }) => {
-        appConfig.save(key, value);
-      },
-
-      'paths:browse': async ({ type }) => {
-        const current =
-          type === 'library'
-            ? paths.libraryDir
-            : type === 'playlists'
-              ? paths.playlistsDir
-              : paths.visualizerPresetsDir;
-        const selected = await Utils.openFileDialog({
-          startingFolder: current,
-          canChooseFiles: false,
-          canChooseDirectory: true,
-          allowsMultipleSelection: false,
-        });
-        // User cancelled or nothing selected
-        if (!selected || selected.length === 0 || selected[0] === '') return null;
-        const chosen = selected[0].trim();
-        if (!chosen) return null;
-        if (type === 'library') {
-          paths.setLibraryDir(chosen);
-        } else if (type === 'playlists') {
-          paths.setPlaylistsDir(chosen);
-        } else {
-          paths.setVisualizerPresetsDir(chosen);
-          invalidateCustomVisualizerPresetCache();
-        }
-        return paths.getAll();
-      },
-
-      'visualizer-presets:clear-folder': () => {
-        paths.clearVisualizerPresetsDir();
-        invalidateCustomVisualizerPresetCache();
-        return paths.getAll();
-      },
-
-      'visualizer-presets:list': () => {
-        return listCustomVisualizerPresets(paths.visualizerPresetsDir);
-      },
-
-      'visualizer-presets:get': async ({ id }) => {
-        return await getCustomVisualizerPreset(paths.visualizerPresetsDir, id);
-      },
+const rpc = createRPC<BeatdownBunLocalSchema, BeatdownBunRemoteSchema>({
+  requestHandler: {
+    'download:preview': async ({ url }) => {
+      return await getContent(url);
     },
+
+    'download:add': async ({ url, format, quality }) => {
+      rpc.proxy.send['download:fetching'](undefined as any);
+      try {
+        const content = await getContent(url);
+        rpc.proxy.send['download:fetch_done'](undefined as any);
+        return await queue.add(content, url, format, quality);
+      } catch (err) {
+        rpc.proxy.send['download:error']({ message: (err as Error).message });
+        throw err;
+      }
+    },
+
+    'download:remove': ({ id }) => {
+      queue.remove(id);
+    },
+
+    'track:remove': ({ downloadId, trackId }) => {
+      queue.removeTrack(downloadId, trackId);
+    },
+
+    'download:redownload': ({ id }) => {
+      queue.redownload(id);
+    },
+
+    'download:pause': ({ id }) => {
+      queue.pause(id);
+    },
+
+    'download:resume': ({ id }) => {
+      queue.resume(id);
+    },
+
+    'downloads:getAll': () => {
+      return queue.getAll();
+    },
+
+    'downloads:retryFailed': () => {
+      queue.retryAllFailed();
+    },
+
+    'downloads:resumeInterrupted': () => {
+      const count = queue.resumeInterrupted();
+      return { count };
+    },
+
+    'app:openExternal': ({ url }) => {
+      return Utils.openExternal(url);
+    },
+
+    'app:forceQuit': () => {
+      isForceQuitting = true;
+      process.exit(0);
+    },
+
+    'app:cancelClose': () => {
+      // no-op: close confirmation is now handled natively via showMessageBox
+    },
+
+    'stream:getUrl': ({ filePath }) => {
+      return `http://${STREAM_HOST}:${streamPort}/stream?path=${encodeURIComponent(filePath)}`;
+    },
+
+    'stream:getPort': () => streamPort,
+
+    'lyrics:get': ({ artist, title }) => {
+      return getLyrics(artist, title);
+    },
+
+    'window:zoom': () => {
+      if (win.isMaximized()) {
+        win.unmaximize();
+      } else {
+        win.maximize();
+      }
+    },
+
+    'paths:get': () => {
+      return paths.getAll();
+    },
+
+    'cast:discover': async () => {
+      const devices = await discoverDevices(4000);
+      castDevices.clear();
+      for (const d of devices) castDevices.set(d.id, d);
+      return devices;
+    },
+
+    'cast:start': async ({ deviceId, streamPath, title, artist }) => {
+      const device = castDevices.get(deviceId);
+      if (!device) throw new Error(`Unknown cast device: ${deviceId}`);
+      const lanIp = getLanIp();
+      const streamUrl = `http://${lanIp}:${streamPort}/stream?path=${encodeURIComponent(streamPath)}`;
+      await castTrack(device, streamUrl, title, artist);
+    },
+
+    'cast:stop': async ({ deviceId }) => {
+      const device = castDevices.get(deviceId);
+      if (!device) return;
+      await stopCast(device);
+    },
+
+    'cast:pause': async ({ deviceId }) => {
+      const device = castDevices.get(deviceId);
+      if (!device) return;
+      await pauseCast(device);
+    },
+
+    'cast:resume': async ({ deviceId }) => {
+      const device = castDevices.get(deviceId);
+      if (!device) return;
+      await resumeCast(device);
+    },
+
+    'cast:seek': async ({ deviceId, seconds }) => {
+      const device = castDevices.get(deviceId);
+      if (!device) return;
+      await seekCast(device, seconds);
+    },
+
+    'settings:load': () => {
+      return appConfig.load();
+    },
+
+    'settings:save': ({ key, value }) => {
+      appConfig.save(key, value);
+      if (key === 'appSettings' && value && typeof value === 'object' && 'maxConcurrentDownloads' in value) {
+        queue.setConcurrency((value as { maxConcurrentDownloads: number }).maxConcurrentDownloads);
+      }
+    },
+
+    'paths:browse': async ({ type }) => {
+      const current =
+        type === 'library'
+          ? paths.libraryDir
+          : type === 'playlists'
+            ? paths.playlistsDir
+            : paths.visualizerPresetsDir;
+      const selected = await Utils.openFileDialog({
+        startingFolder: current,
+        canChooseFiles: false,
+        canChooseDirectory: true,
+        allowsMultipleSelection: false,
+      });
+      // User cancelled or nothing selected
+      if (!selected || selected.length === 0 || selected[0] === '') return null;
+      const chosen = selected[0].trim();
+      if (!chosen) return null;
+      if (type === 'library') {
+        paths.setLibraryDir(chosen);
+      } else if (type === 'playlists') {
+        paths.setPlaylistsDir(chosen);
+      } else {
+        paths.setVisualizerPresetsDir(chosen);
+        invalidateCustomVisualizerPresetCache();
+      }
+      return paths.getAll();
+    },
+
+    'visualizer-presets:clear-folder': () => {
+      paths.clearVisualizerPresetsDir();
+      invalidateCustomVisualizerPresetCache();
+      return paths.getAll();
+    },
+
+    'visualizer-presets:list': () => {
+      return listCustomVisualizerPresets(paths.visualizerPresetsDir);
+    },
+
+    'visualizer-presets:get': async ({ id }) => {
+      return await getCustomVisualizerPreset(paths.visualizerPresetsDir, id);
+    },
+  },
+  transport: {
+    registerHandler: () => {},
   },
 });
 
@@ -397,6 +401,10 @@ queue.on('download:removed', (id: string) => {
 // ── Load existing downloads ────────────────────────────────────────────────────
 
 queue.loadFromDisk();
+const savedAppSettings = appConfig.load()?.appSettings as { maxConcurrentDownloads?: number } | undefined;
+if (typeof savedAppSettings?.maxConcurrentDownloads === 'number') {
+  queue.setConcurrency(savedAppSettings.maxConcurrentDownloads);
+}
 logger.info('Beatdown starting up...');
 
 // ── Close confirmation state ──────────────────────────────────────────────────

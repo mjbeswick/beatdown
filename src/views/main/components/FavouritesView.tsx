@@ -1,9 +1,11 @@
+import { useMemo } from 'react';
 import { useUnit } from 'effector-react';
 import { Heart, Play } from 'lucide-react';
 import { $downloads, $search } from '../stores/downloads';
 import { $favourites } from '../stores/favourites';
-import { playPlaylist, playTrack } from '../stores/player';
+import { playPlaylist } from '../stores/player';
 import { getTrackAlbumName } from '../../../shared/track-metadata';
+import { createFuzzySearchMatcher } from '../lib/search';
 import TrackRow from './TrackRow';
 import type { TrackInfo } from '../../../shared/types';
 
@@ -13,29 +15,29 @@ export default function FavouritesView() {
   const search = useUnit($search);
 
   // Collect all done tracks that are favourited
-  const tracks: Array<{ track: TrackInfo; downloadId: string; coverArt?: string; albumName: string }> = [];
-  for (const item of downloads) {
-    for (const track of item.tracks) {
-      if (track.status === 'done' && favourites.includes(track.id)) {
-        tracks.push({
-          track,
-          downloadId: item.id,
-          coverArt: item.coverArt,
-          albumName: getTrackAlbumName(track, item.name),
-        });
+  const tracks = useMemo(() => {
+    const result: Array<{ track: TrackInfo; downloadId: string; coverArt?: string; albumName: string }> = [];
+    for (const item of downloads) {
+      for (const track of item.tracks) {
+        if (track.status === 'done' && favourites.includes(track.id)) {
+          result.push({
+            track,
+            downloadId: item.id,
+            coverArt: item.coverArt,
+            albumName: getTrackAlbumName(track, item.name),
+          });
+        }
       }
     }
-  }
+    return result;
+  }, [downloads, favourites]);
 
-  const q = search.trim().toLowerCase();
-  const filtered = q
-    ? tracks.filter(
-        ({ track }) =>
-          track.title.toLowerCase().includes(q) ||
-          track.artist.toLowerCase().includes(q) ||
-          (track.album ?? '').toLowerCase().includes(q)
-      )
-    : tracks;
+  const filtered = useMemo(() => {
+    const matchesSearch = createFuzzySearchMatcher(search);
+    return tracks.filter(({ track, albumName }) =>
+      matchesSearch(track.title, track.artist, track.album, albumName)
+    );
+  }, [tracks, search]);
 
   const handlePlayAll = () => {
     if (filtered.length === 0) return;

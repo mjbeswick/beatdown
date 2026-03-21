@@ -16,6 +16,7 @@ import type { DownloadItem } from '../types';
 import TrackRow from './TrackRow';
 import { useContextMenu } from '../hooks/useContextMenu';
 import ContextMenu from './ContextMenu';
+import { confirmDownloadRemoval } from '../lib/destructiveActionConfirm';
 
 export function fmtSpeed(bps: number): string {
   if (bps >= 1024 * 1024) return `${(bps / 1024 / 1024).toFixed(1)} MB/s`;
@@ -62,6 +63,11 @@ export default function DownloadRow({ item }: Props) {
       : isDone
       ? 'bg-emerald-500'
       : 'bg-emerald-500';
+
+  const removeItem = () => {
+    if (!confirmDownloadRemoval(item)) return;
+    removeDownloadFx(item.id);
+  };
 
   return (
     <div className="border-b border-zinc-800 last:border-b-0">
@@ -141,7 +147,7 @@ export default function DownloadRow({ item }: Props) {
           <button
             onClick={(e) => {
               e.stopPropagation();
-              removeDownloadFx(item.id);
+              removeItem();
             }}
             className="w-5 h-5 flex items-center justify-center text-zinc-700 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all rounded"
           >
@@ -166,7 +172,7 @@ export default function DownloadRow({ item }: Props) {
             {
               label: 'Remove',
               icon: <Trash2 size={13} />,
-              onClick: () => removeDownloadFx(item.id),
+              onClick: removeItem,
               danger: true,
             },
           ]}
