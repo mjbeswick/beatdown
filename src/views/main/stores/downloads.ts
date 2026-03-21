@@ -45,7 +45,7 @@ export const $preview = createStore<PreviewPhase | null>(null)
 
 export const removeDownloadFx = createEffect(async (id: string) => {
   const item = $downloads.getState().find((download) => download.id === id);
-  if (!confirmDownloadRemoval(item)) return;
+  if (!(await confirmDownloadRemoval(item))) return;
 
   return rpc.proxy.request['download:remove']({ id });
 });
@@ -53,7 +53,7 @@ export const removeDownloadFx = createEffect(async (id: string) => {
 export const removeTrackFx = createEffect(async ({ downloadId, trackId }: { downloadId: string; trackId: string }) => {
   const item = $downloads.getState().find((download) => download.id === downloadId);
   const track = item?.tracks.find((entry) => entry.id === trackId);
-  if (!confirmTrackRemoval(track)) return;
+  if (!(await confirmTrackRemoval(track))) return;
 
   return rpc.proxy.request['track:remove']({ downloadId, trackId });
 });

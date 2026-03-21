@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { execFileSync } from 'child_process';
 import {
   DownloadItem,
   TrackInfo,
@@ -23,6 +24,34 @@ function escPipe(s: string): string {
 
 function unescPipe(s: string): string {
   return s.replace(/\\\|/g, '|');
+}
+
+function decodeOptionalMetadataField(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  const value = unescPipe(raw).trim();
+  return value || undefined;
+}
+
+function readAlbumFromFile(filePath: string): string | undefined {
+  try {
+    const value = execFileSync(
+      'ffprobe',
+      [
+        '-v',
+        'error',
+        '-show_entries',
+        'format_tags=album',
+        '-of',
+        'default=noprint_wrappers=1:nokey=1',
+        filePath,
+      ],
+      { encoding: 'utf8' }
+    ).trim();
+
+    return value || undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 // Split on unescaped | (i.e., | not preceded by \)
@@ -62,10 +91,10 @@ export function savePlaylist(item: DownloadItem): void {
 
   const pending = item.tracks.filter((t) => t.status !== 'done');
   if (pending.length > 0) {
-    lines.push('# Pending tracks (index|trackId|artist|title)');
+    lines.push('# Pending tracks (index|trackId|artist|title|album)');
     for (const t of pending) {
       lines.push(
-        `#EXTREEL-PENDING:${t.index}|${t.id}|${escPipe(t.artist)}|${escPipe(t.title)}`
+        `#EXTREEL-PENDING:${t.index}|${t.id}|${escPipe(t.artist)}|${escPipe(t.title)}|${escPipe(t.album ?? '')}`
       );
     }
     lines.push('');
@@ -76,7 +105,7 @@ export function savePlaylist(item: DownloadItem): void {
     lines.push('# Downloaded tracks');
     for (const t of done) {
       lines.push(
-        `#EXTREEL-DONE:${t.index}|${t.id}|${escPipe(t.artist)}|${escPipe(t.title)}`
+        `#EXTREEL-DONE:${t.index}|${t.id}|${escPipe(t.artist)}|${escPipe(t.title)}|${escPipe(t.album ?? '')}`
       );
       lines.push(`#EXTINF:-1,${t.artist} - ${t.title}`);
       lines.push(t.filePath ?? '');
@@ -155,12 +184,14 @@ function parseM3U(filePath: string, outputDir: string): DownloadItem | null {
     id: string;
     artist: string;
     title: string;
+    album?: string;
   }[] = [];
   const doneEntries: {
     index: number;
     id: string;
     artist: string;
     title: string;
+    album?: string;
     filePath: string;
   }[] = [];
 
@@ -191,6 +222,7 @@ function parseM3U(filePath: string, outputDir: string): DownloadItem | null {
           id: parsed[1],
           artist: unescPipe(parsed[2]),
           title: unescPipe(parsed[3]),
+          album: decodeOptionalMetadataField(parsed[4]),
         });
       }
     } else if (line.startsWith('#EXTREEL-DONE:')) {
@@ -218,6 +250,7 @@ function parseM3U(filePath: string, outputDir: string): DownloadItem | null {
           id: parsed[1],
           artist: unescPipe(parsed[2]),
           title: unescPipe(parsed[3]),
+          album: decodeOptionalMetadataField(parsed[4]),
           filePath: trackFilePath,
         });
       }
@@ -237,6 +270,7 @@ function parseM3U(filePath: string, outputDir: string): DownloadItem | null {
       index: p.index,
       title: p.title,
       artist: p.artist,
+      album: p.album ?? (type === 'album' ? name : undefined),
       status: 'queued',
       progress: 0,
     });
@@ -244,11 +278,13 @@ function parseM3U(filePath: string, outputDir: string): DownloadItem | null {
 
   for (const d of doneEntries) {
     const exists = d.filePath ? fs.existsSync(d.filePath) : false;
+    const album = d.album ?? (exists ? readAlbumFromFile(d.filePath) : undefined) ?? (type === 'album' ? name : undefined);
     allTracks.push({
       id: d.id,
       index: d.index,
       title: d.title,
       artist: d.artist,
+      album,
       status: exists ? 'done' : 'queued',
       progress: exists ? 100 : 0,
       filePath: exists ? d.filePath : undefined,

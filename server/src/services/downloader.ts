@@ -165,7 +165,7 @@ export function downloadTrack(
 interface Metadata {
   title: string;
   artist: string;
-  album: string;
+  album?: string;
   coverArtUrl?: string;
 }
 
@@ -211,10 +211,14 @@ export async function embedMetadata(filePath: string, meta: Metadata): Promise<s
 
     ffmpegArgs.push(
       '-metadata', `title=${meta.title}`,
-      '-metadata', `artist=${meta.artist}`,
-      '-metadata', `album=${meta.album}`,
-      outputPath
+      '-metadata', `artist=${meta.artist}`
     );
+
+    if (meta.album) {
+      ffmpegArgs.push('-metadata', `album=${meta.album}`);
+    }
+
+    ffmpegArgs.push(outputPath);
 
     await new Promise<void>((resolve, reject) => {
       const proc = spawn('ffmpeg', ffmpegArgs);

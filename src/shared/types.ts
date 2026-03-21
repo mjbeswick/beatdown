@@ -73,6 +73,18 @@ export interface DLNADevice {
   controlUrl: string;
 }
 
+export interface ArtistInfo {
+  name: string;
+  summary?: string;
+  imageUrl?: string;
+  tags: string[];
+  area?: string;
+  type?: string;
+  activeYears?: string;
+  wikipediaUrl?: string;
+  musicBrainzUrl?: string;
+}
+
 // RPC schema — types shared between bun process and webview
 export interface AddDownloadParams {
   url: string;

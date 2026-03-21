@@ -71,6 +71,7 @@ export class DownloadQueue extends EventEmitter {
       index: i,
       title: t.title,
       artist: t.artist,
+      album: t.album ?? (content.type === 'album' ? content.name : undefined),
       status: 'queued' as TrackStatus,
       progress: 0,
     }));
@@ -297,8 +298,8 @@ export class DownloadQueue extends EventEmitter {
 
     try {
       const filePath = await downloadTrack(
-        { title: track.title, artist: track.artist },
-        item.name,
+        { title: track.title, artist: track.artist, album: track.album },
+        track.album ?? (item.type === 'album' ? item.name : ''),
         item.outputDir,
         item.format,
         item.quality,

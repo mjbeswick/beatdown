@@ -1,6 +1,28 @@
 type Level = 'info' | 'warn' | 'error' | 'debug';
 
+const LEVEL_PRIORITY: Record<Level, number> = {
+  debug: 10,
+  info: 20,
+  warn: 30,
+  error: 40,
+};
+
+function getConfiguredLevel(): Level {
+  const rawLevel = process.env.BEATDOWN_LOG_LEVEL?.trim().toLowerCase();
+  if (rawLevel === 'debug' || rawLevel === 'info' || rawLevel === 'warn' || rawLevel === 'error') {
+    return rawLevel;
+  }
+
+  return 'info';
+}
+
+const configuredLevel = getConfiguredLevel();
+
 function log(level: Level, msg: string, data?: unknown): void {
+  if (LEVEL_PRIORITY[level] < LEVEL_PRIORITY[configuredLevel]) {
+    return;
+  }
+
   const ts = new Date().toISOString();
   const prefix = `[${ts}] [${level.toUpperCase().padEnd(5)}]`;
   if (data !== undefined) {

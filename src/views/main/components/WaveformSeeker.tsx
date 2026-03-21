@@ -58,6 +58,7 @@ export default function WaveformSeeker({ className = 'w-full min-w-0' }: Props) 
       height: waveformHeight,
       normalize: true,
       interact: true,
+      dragToSeek: true,
       autoplay: false,
     });
 
@@ -76,7 +77,7 @@ export default function WaveformSeeker({ className = 'w-full min-w-0' }: Props) 
     });
 
     ws.on('error', () => setLoading(false));
-    ws.on('interaction', (time) => seek(time));
+    ws.on('interaction', (time) => seekToTime(time));
 
     wsRef.current = ws;
 
@@ -93,7 +94,7 @@ export default function WaveformSeeker({ className = 'w-full min-w-0' }: Props) 
       setReady(false);
       setLoading(false);
     };
-  }, [waveformBarWidth, waveformBarGap, barRadius, waveformHeight]);
+  }, [waveformBarWidth, waveformBarGap, barRadius, waveformHeight, player.duration]);
 
   useEffect(() => {
     const ws = wsRef.current;

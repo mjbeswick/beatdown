@@ -5,6 +5,7 @@ import type { BeatdownBunLocalSchema, BeatdownBunRemoteSchema } from '../shared/
 import { queue } from './services/queue';
 import { getContent } from './services/content';
 import { getLyrics } from './services/lyrics';
+import { getArtistInfo } from './services/artist-info';
 import { paths } from './services/paths';
 import { appConfig } from './services/appConfig';
 import { logger } from './logger';
@@ -78,7 +79,7 @@ const streamServer = Bun.serve({
 
     // Security: ensure the resolved path stays within the configured library dir
     const libraryBase = paths.libraryDir;
-    logger.info(`Stream request: ${req.method} ${cleanPath} (base: ${libraryBase})`);
+    logger.debug(`Stream request: ${req.method} ${cleanPath} (base: ${libraryBase})`);
     if (!cleanPath.startsWith(libraryBase + path.sep)) {
       logger.warn(`Stream forbidden: ${cleanPath}`);
       return new Response('Forbidden', { status: 403 });
@@ -252,6 +253,17 @@ const rpc = createRPC<BeatdownBunLocalSchema, BeatdownBunRemoteSchema>({
       return { count };
     },
 
+    'dialog:confirm': async ({ message }) => {
+      const { response } = await Utils.showMessageBox({
+        type: 'question',
+        message,
+        buttons: ['Cancel', 'OK'],
+        defaultId: 1,
+        cancelId: 0,
+      });
+      return response === 1;
+    },
+
     'app:openExternal': ({ url }) => {
       return Utils.openExternal(url);
     },
@@ -273,6 +285,10 @@ const rpc = createRPC<BeatdownBunLocalSchema, BeatdownBunRemoteSchema>({
 
     'lyrics:get': ({ artist, title }) => {
       return getLyrics(artist, title);
+    },
+
+    'artist:getInfo': ({ artist, forceRefresh }) => {
+      return getArtistInfo(artist, { forceRefresh });
     },
 
     'window:zoom': () => {

@@ -1,4 +1,4 @@
-import type { DownloadItem, LyricLine, AddDownloadParams, SpotifyContent, DLNADevice } from './types';
+import type { DownloadItem, LyricLine, AddDownloadParams, SpotifyContent, DLNADevice, ArtistInfo } from './types';
 export type { DLNADevice };
 
 export interface BeatdownPaths {
@@ -48,6 +48,7 @@ export interface BeatdownRPCSchema {
       'stream:getUrl': { params: { filePath: string }; response: string };
       'stream:getPort': { params: undefined; response: number };
       'lyrics:get': { params: { artist: string; title: string }; response: LyricLine[] | null };
+      'artist:getInfo': { params: { artist: string; forceRefresh?: boolean }; response: ArtistInfo | null };
       'window:zoom': { params: undefined; response: void };
       'app:openExternal': { params: { url: string }; response: boolean };
       'app:forceQuit': { params: undefined; response: void };
@@ -71,6 +72,7 @@ export interface BeatdownRPCSchema {
       'cast:seek': { params: { deviceId: string; seconds: number }; response: void };
       'settings:load': { params: undefined; response: RawSettings };
       'settings:save': { params: { key: SettingsKey; value: unknown }; response: void };
+      'dialog:confirm': { params: { message: string }; response: boolean };
     };
     messages: {
       'downloads:state': DownloadItem[];

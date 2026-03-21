@@ -55,6 +55,8 @@ let manualSkip = false;
 // Set when user manually skips while we're still in 'preloading' state.
 // The crossfade starts as soon as preloading completes.
 let pendingManualSkip = false;
+let preloadDeck: HTMLAudioElement | null = null;
+let preloadCanPlayHandler: EventListener | null = null;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -63,11 +65,21 @@ function isDjActive(): boolean {
   return djMode !== 'off' && !$cast.getState().isCasting;
 }
 
+function clearPreloadCanPlayHandler(): void {
+  if (preloadDeck && preloadCanPlayHandler) {
+    preloadDeck.removeEventListener('canplay', preloadCanPlayHandler);
+  }
+  preloadDeck = null;
+  preloadCanPlayHandler = null;
+}
+
 function reset(): void {
   if (crossfadeTimer !== null) {
     clearTimeout(crossfadeTimer);
     crossfadeTimer = null;
   }
+
+  clearPreloadCanPlayHandler();
 
   // Cancel in-progress gain ramps and restore active deck to full volume
   const ctx = getAudioContext();
@@ -116,14 +128,21 @@ function beginPreload(
   outgoingBpmReady = djMode !== 'beatmatch' || !outgoingId || !outgoingSrc;
 
   const deck = getInactiveDeck();
+  clearPreloadCanPlayHandler();
   deck.src = src;
   deck.load();
 
-  const onCanPlay = () => {
+  const onCanPlay: EventListener = () => {
     deck.removeEventListener('canplay', onCanPlay);
+    if (preloadCanPlayHandler === onCanPlay) {
+      preloadDeck = null;
+      preloadCanPlayHandler = null;
+    }
     inactiveDeckReady = true;
     markPreloaded();
   };
+  preloadDeck = deck;
+  preloadCanPlayHandler = onCanPlay;
   deck.addEventListener('canplay', onCanPlay);
 
   if (djMode !== 'beatmatch') {
@@ -264,26 +283,12 @@ registerTrackChangeHook((trackId, _src) => {
     return true; // prevent engine.ts from reloading
   }
 
-  if (nextTrack?.track.id === trackId && state === 'preloading') {
-    // Still buffering / running BPM detection — mark the intent so
-    // markPreloaded() fires the crossfade as soon as the deck is ready.
-    pendingManualSkip = true;
-    manualSkip = true;
-    return true; // prevent engine.ts from reloading
-  }
-
-  const outgoingId = outgoingTrackId ?? getLoadedTrackId();
-  const outgoingSrc = getActiveDeck().currentSrc || null;
-  if (!outgoingId || outgoingId === trackId) return false;
-
+  // Manual navigation should only wait on the DJ engine when the incoming
+  // track is already fully preloaded. Otherwise fall through to the normal
+  // engine.ts path so "Next" changes tracks immediately.
   if (state !== 'idle') {
     reset();
   }
-
-  beginPreload(targetTrack, _src, outgoingId, outgoingSrc, true);
-  pendingManualSkip = true;
-  return true;
-
   return false;
 });
 

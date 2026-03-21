@@ -339,7 +339,7 @@ export default function SettingsView() {
               {reelPaths?.visualizerPresetsDir && (
                 <button
                   onClick={async () => {
-                    if (!confirmVisualizerPresetFolderClear()) return;
+                    if (!(await confirmVisualizerPresetFolderClear())) return;
                     const updated = await rpc.proxy.request['visualizer-presets:clear-folder'](undefined as never).catch(() => null);
                     if (updated) {
                       invalidateVisualizerPresetCatalog();
@@ -437,8 +437,8 @@ export default function SettingsView() {
               </span>
               {favoritePresetCount > 0 && (
                 <button
-                  onClick={() => {
-                    if (!confirmVisualizerFavoritesReset(favoritePresetCount)) return;
+                  onClick={async () => {
+                    if (!(await confirmVisualizerFavoritesReset(favoritePresetCount))) return;
                     resetVisualizerFavorites();
                   }}
                   className="text-zinc-500 hover:text-zinc-300 bg-zinc-700/60 border border-zinc-600/50 rounded px-1.5 py-0.5 transition-colors text-[10px]"

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useUnit } from 'effector-react';
-import { ListMusic, Play, Music2, Pause, PlayCircle, Loader2, Clock3, Download as DownloadIcon, Trash2, ExternalLink } from 'lucide-react';
+import { ListMusic, Play, Music2, Pause, PlayCircle, Loader2, Clock3, Download as DownloadIcon, Trash2, ExternalLink, MoreHorizontal } from 'lucide-react';
 import { $downloads, $search, pauseDownloadFx, resumeDownloadFx, redownloadFx, removeDownloadFx, getPrimaryDownloadAction } from '../stores/downloads';
 import { enqueueTrack, playDownloadPlaylist } from '../stores/player';
 import type { DownloadItem, DownloadStatus } from '../../../shared/types';
@@ -246,6 +246,7 @@ export default function PlaylistsView() {
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = playlists.find((p) => p.id === selectedId) ?? playlists[0] ?? null;
+  const { pos: headerMenuPos, open: openHeaderMenu, close: closeHeaderMenu } = useContextMenu();
 
   if (playlists.length === 0) {
     return (
@@ -269,6 +270,50 @@ export default function PlaylistsView() {
     if (!sourceLink) return;
     void rpc.proxy.request['app:openExternal']({ url: sourceLink.url }).catch(() => {});
   };
+
+  const headerMenuItems: ContextMenuEntry[] = [];
+  if (selected) {
+    const selectedPrimaryAction = getPrimaryDownloadAction(selected);
+
+    if (doneTracks.length > 0) {
+      headerMenuItems.push(
+        { label: 'Play All', icon: <Play size={13} className="fill-current" />, onClick: () => playDownloadPlaylist(selected) },
+        { label: 'Enqueue All', icon: <ListMusic size={13} />, onClick: () => enqueueDownloadedPlaylist(selected) },
+        { separator: true }
+      );
+    }
+
+    if (isActiveDownload) {
+      headerMenuItems.push(
+        { label: 'Pause', icon: <Pause size={13} />, onClick: () => pauseDownloadFx(selected.id) },
+        { separator: true }
+      );
+    }
+
+    if (selectedPrimaryAction) {
+      headerMenuItems.push(
+        {
+          label: selectedPrimaryAction === 'resume' ? 'Resume' : 'Download',
+          icon: selectedPrimaryAction === 'resume' ? <PlayCircle size={13} /> : <DownloadIcon size={13} />,
+          onClick: () => {
+            if (selectedPrimaryAction === 'resume') {
+              resumeDownloadFx(selected.id);
+            } else {
+              redownloadFx(selected.id);
+            }
+          },
+        },
+        { separator: true }
+      );
+    }
+
+    headerMenuItems.push({
+      label: 'Remove',
+      icon: <Trash2 size={13} />,
+      onClick: () => removeDownloadFx(selected.id),
+      danger: true,
+    });
+  }
 
   return (
     <main className="flex-1 flex overflow-hidden">
@@ -355,7 +400,23 @@ export default function PlaylistsView() {
                     Play all
                   </button>
                 )}
+                <button
+                  onClick={openHeaderMenu}
+                  className="text-zinc-500 hover:text-zinc-300 transition-colors"
+                  title="More options"
+                >
+                  <MoreHorizontal size={16} />
+                </button>
               </div>
+
+              {headerMenuPos && (
+                <ContextMenu
+                  x={headerMenuPos.x}
+                  y={headerMenuPos.y}
+                  onClose={closeHeaderMenu}
+                  items={headerMenuItems}
+                />
+              )}
             </div>
 
             <div className="shrink-0 bg-zinc-800/60 border-b border-zinc-700/60 flex items-center gap-2 px-3 py-1.5 text-xs text-zinc-500 font-medium select-none">

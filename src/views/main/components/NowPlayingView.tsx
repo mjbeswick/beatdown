@@ -181,10 +181,10 @@ export default function NowPlayingView({
     lastQueueScrollTrackIdRef.current = current.track.id;
   }, [current, player.queue.length, player.queueIndex, search, showSidebar, tab]);
 
-  const removeQueueTrack = (queueIdx: number) => {
+  const removeQueueTrack = async (queueIdx: number) => {
     const queued = player.queue[queueIdx];
     if (!queued) return;
-    if (!confirmQueueRemoval(queued.track)) return;
+    if (!(await confirmQueueRemoval(queued.track))) return;
     removeFromQueue(queueIdx);
   };
 
