@@ -45,7 +45,7 @@ export default function AlbumsView() {
         minContentWidth={420}
         pane={
           <div className="flex h-full flex-col overflow-hidden">
-            <div className="bg-zinc-800/60 backdrop-blur border-b border-zinc-700/60 px-3 py-1.5 text-xs text-zinc-500 font-medium select-none flex items-center justify-between shrink-0">
+            <div className="bg-zinc-900 border-b border-zinc-800 px-3 py-1.5 text-xs text-zinc-500 font-medium select-none flex items-center justify-between shrink-0">
               <span>Album</span>
               <span>Tracks</span>
             </div>
@@ -57,8 +57,8 @@ export default function AlbumsView() {
                   <div
                     key={item.id}
                     onClick={() => setSelectedId(item.id)}
-                    className={`flex items-center gap-2.5 px-3 py-2 cursor-pointer border-b border-zinc-800/60 last:border-b-0 transition-colors ${
-                      isSelected ? 'bg-zinc-700/50' : 'hover:bg-zinc-800/30'
+                    className={`flex items-center gap-2.5 px-3 py-2 cursor-pointer border-b border-zinc-800/40 last:border-b-0 transition-colors ${
+                      isSelected ? 'bg-zinc-800' : 'hover:bg-zinc-800/50'
                     }`}
                   >
                     <div className="w-8 h-8 rounded overflow-hidden bg-zinc-700 flex items-center justify-center shrink-0">
@@ -84,7 +84,7 @@ export default function AlbumsView() {
       >
         {selected && (
           <div className="flex h-full flex-col overflow-hidden">
-            <div className="shrink-0 flex items-center gap-4 px-5 py-3 border-b border-zinc-800 bg-zinc-900/40">
+            <div className="shrink-0 flex items-center gap-4 px-5 py-3 border-b border-zinc-800 bg-zinc-900/70">
               <div className="w-14 h-14 rounded overflow-hidden bg-zinc-700 flex items-center justify-center shrink-0">
                 {selected.coverArt ? (
                   <img src={selected.coverArt} alt="" className="w-full h-full object-cover" />

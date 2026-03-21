@@ -61,7 +61,7 @@ export default function FavouritesView() {
   return (
     <main className="flex-1 flex flex-col overflow-hidden">
       {/* Header */}
-      <div className="shrink-0 bg-zinc-800/60 border-b border-zinc-700/60 flex items-center gap-3 px-4 py-2 select-none">
+      <div className="shrink-0 bg-zinc-900 border-b border-zinc-800 flex items-center gap-3 px-4 py-2 select-none">
         <Heart size={14} className="text-rose-500 fill-rose-500 shrink-0" />
         <span className="text-xs text-zinc-400 font-medium flex-1">
           {filtered.length} {filtered.length === 1 ? 'track' : 'tracks'}

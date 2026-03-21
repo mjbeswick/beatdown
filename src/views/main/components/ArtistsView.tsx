@@ -116,7 +116,7 @@ export default function ArtistsView() {
         minContentWidth={420}
         pane={
           <div className="flex h-full flex-col overflow-hidden">
-            <div className="bg-zinc-800/60 backdrop-blur border-b border-zinc-700/60 px-3 py-1.5 text-xs text-zinc-500 font-medium select-none flex items-center justify-between shrink-0">
+            <div className="bg-zinc-900 border-b border-zinc-800 px-3 py-1.5 text-xs text-zinc-500 font-medium select-none flex items-center justify-between shrink-0">
               <span>Artist</span>
               <span>Tracks</span>
             </div>
@@ -127,8 +127,8 @@ export default function ArtistsView() {
                   <div
                     key={artist}
                     onClick={() => setSelectedArtist(artist)}
-                    className={`flex items-center gap-2.5 px-3 py-2 cursor-pointer border-b border-zinc-800/60 last:border-b-0 transition-colors ${
-                      isSelected ? 'bg-zinc-700/50' : 'hover:bg-zinc-800/30'
+                    className={`flex items-center gap-2.5 px-3 py-2 cursor-pointer border-b border-zinc-800/40 last:border-b-0 transition-colors ${
+                      isSelected ? 'bg-zinc-800' : 'hover:bg-zinc-800/50'
                     }`}
                   >
                     <div className="w-7 h-7 rounded-full bg-zinc-700 flex items-center justify-center shrink-0 text-zinc-400 text-xs font-medium">
@@ -145,7 +145,7 @@ export default function ArtistsView() {
       >
         {resolvedArtist && (
           <div className="flex h-full flex-col overflow-hidden">
-            <div className="shrink-0 flex items-start gap-4 px-5 py-3 border-b border-zinc-800 bg-zinc-900/40">
+            <div className="shrink-0 flex items-start gap-4 px-5 py-3 border-b border-zinc-800 bg-zinc-900/70">
               <div className="w-24 h-24 rounded-2xl overflow-hidden bg-zinc-800 border border-zinc-700/80 shadow-[0_12px_30px_rgba(0,0,0,0.28)] flex items-center justify-center shrink-0 text-zinc-300 text-3xl font-semibold">
                 {artistInfo?.imageUrl ? (
                   <img src={artistInfo.imageUrl} alt="" className="w-full h-full object-cover" />
@@ -243,7 +243,7 @@ export default function ArtistsView() {
             <div className="flex-1 overflow-y-auto overflow-x-hidden">
               {[...albumGroups.entries()].map(([albumName, albumTracks]) => (
                 <div key={albumName}>
-                  <div className="sticky top-0 bg-zinc-800/60 backdrop-blur border-b border-zinc-700/60 flex items-center justify-between px-4 py-1.5 text-xs text-zinc-500 font-medium select-none z-10">
+                  <div className="sticky top-0 bg-zinc-900 border-b border-zinc-800 flex items-center justify-between px-4 py-1.5 text-xs text-zinc-500 font-medium select-none z-10">
                     <span>{albumName}</span>
                     <span>{albumTracks.length}</span>
                   </div>

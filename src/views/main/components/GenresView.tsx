@@ -128,7 +128,7 @@ export default function GenresView() {
         minContentWidth={420}
         pane={
           <div className="flex h-full flex-col overflow-hidden">
-            <div className="flex shrink-0 items-center justify-between border-b border-zinc-700/60 bg-zinc-800/60 px-3 py-1.5 text-xs font-medium text-zinc-500 backdrop-blur select-none">
+            <div className="flex shrink-0 items-center justify-between border-b border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs font-medium text-zinc-500 select-none">
               <span>Genre</span>
               <span>Tracks</span>
             </div>
@@ -139,8 +139,8 @@ export default function GenresView() {
                   <div
                     key={genre.key}
                     onClick={() => setSelectedKey(genre.key)}
-                    className={`flex cursor-pointer items-center gap-2.5 border-b border-zinc-800/60 px-3 py-2 transition-colors last:border-b-0 ${
-                      isSelected ? 'bg-zinc-700/50' : 'hover:bg-zinc-800/30'
+                    className={`flex cursor-pointer items-center gap-2.5 border-b border-zinc-800/40 px-3 py-2 transition-colors last:border-b-0 ${
+                      isSelected ? 'bg-zinc-800' : 'hover:bg-zinc-800/50'
                     }`}
                   >
                     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-zinc-800 text-zinc-400">
@@ -162,7 +162,7 @@ export default function GenresView() {
       >
         {selectedGenre ? (
           <div className="flex h-full flex-col overflow-hidden">
-            <div className="flex shrink-0 items-center gap-4 border-b border-zinc-800 bg-zinc-900/40 px-5 py-3">
+            <div className="flex shrink-0 items-center gap-4 border-b border-zinc-800 bg-zinc-900/70 px-5 py-3">
               <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-zinc-700/80 bg-zinc-800 text-zinc-300 shadow-[0_12px_30px_rgba(0,0,0,0.28)]">
                 <Tag size={20} />
               </div>

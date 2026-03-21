@@ -19,15 +19,15 @@ export default function Sidebar() {
   const isPlaying = !!player.current;
 
   return (
-    <aside className="w-52 bg-zinc-800/50 border-r border-zinc-700/60 shrink-0 flex flex-col select-none pt-3 pb-4">
+    <aside className="w-52 bg-zinc-950 border-r border-zinc-800 shrink-0 flex flex-col select-none pt-3 pb-4">
       {/* Now Playing */}
       <div className="px-3">
         <button
           onClick={() => navChanged('nowplaying')}
           className={`w-full flex items-center gap-2 px-2 py-1 text-sm rounded-md transition-colors ${
             nav === 'nowplaying'
-              ? 'bg-zinc-700/70 text-zinc-100 font-medium'
-              : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700/30'
+              ? 'bg-zinc-800 text-zinc-100 font-medium'
+              : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/70'
           }`}
         >
           <Headphones size={14} className={`shrink-0 ${isPlaying && nav !== 'nowplaying' ? 'text-emerald-400' : ''}`} />
@@ -43,7 +43,7 @@ export default function Sidebar() {
       </div>
 
       {/* Divider */}
-      <div className="mx-4 mt-3 border-t border-zinc-700/60" />
+      <div className="mx-4 mt-3 border-t border-zinc-800" />
 
       {/* Library section */}
       <div className="flex-1 px-3 py-3 overflow-y-auto">
@@ -72,8 +72,8 @@ export default function Sidebar() {
           onClick={() => navChanged('settings')}
           className={`w-full flex items-center gap-2 px-2 py-1 text-sm rounded-md transition-colors ${
             nav === 'settings'
-              ? 'bg-zinc-700/70 text-zinc-100 font-medium'
-              : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700/30'
+              ? 'bg-zinc-800 text-zinc-100 font-medium'
+              : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/70'
           }`}
         >
           <Settings size={14} className="shrink-0" />

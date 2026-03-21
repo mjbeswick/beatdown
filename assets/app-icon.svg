@@ -1,38 +1,74 @@
 <svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <title>Reel app icon</title>
+  <title>Beatdown app icon</title>
   <defs>
-    <linearGradient id="bg" x1="192" y1="128" x2="848" y2="896" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#1C4A63"/>
-      <stop offset="0.5" stop-color="#173246"/>
-      <stop offset="1" stop-color="#0C1521"/>
+    <linearGradient id="bg" x1="160" y1="112" x2="868" y2="912" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1A4761"/>
+      <stop offset="0.54" stop-color="#11293A"/>
+      <stop offset="1" stop-color="#09111C"/>
     </linearGradient>
-    <radialGradient id="glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(304 232) rotate(31.8) scale(760 588)">
-      <stop offset="0" stop-color="#89E6EA" stop-opacity="0.42"/>
+    <radialGradient id="skyGlow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(286 226) rotate(28) scale(698 542)">
+      <stop offset="0" stop-color="#89E6EA" stop-opacity="0.48"/>
       <stop offset="1" stop-color="#89E6EA" stop-opacity="0"/>
     </radialGradient>
-    <linearGradient id="disc" x1="220" y1="280" x2="704" y2="836" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#FFF9F1"/>
-      <stop offset="1" stop-color="#E4D5C2"/>
+    <radialGradient id="emberGlow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(772 812) rotate(-137) scale(468 412)">
+      <stop offset="0" stop-color="#FFAA4D" stop-opacity="0.26"/>
+      <stop offset="1" stop-color="#FFAA4D" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="ribbon" x1="654" y1="188" x2="834" y2="472" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFD18B"/>
+      <stop offset="0.52" stop-color="#F9A349"/>
+      <stop offset="1" stop-color="#E96837"/>
     </linearGradient>
-    <linearGradient id="accent" x1="604" y1="188" x2="872" y2="428" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#FFD58D"/>
-      <stop offset="0.55" stop-color="#F7A24D"/>
-      <stop offset="1" stop-color="#E56A3B"/>
+    <radialGradient id="vinyl" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(326 304) rotate(46) scale(620 656)">
+      <stop offset="0" stop-color="#253B50"/>
+      <stop offset="0.58" stop-color="#122131"/>
+      <stop offset="1" stop-color="#08111B"/>
+    </radialGradient>
+    <linearGradient id="label" x1="322" y1="404" x2="590" y2="716" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFF9F0"/>
+      <stop offset="1" stop-color="#E4D2BC"/>
+    </linearGradient>
+    <linearGradient id="core" x1="378" y1="472" x2="538" y2="666" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#183149"/>
+      <stop offset="1" stop-color="#0C1725"/>
+    </linearGradient>
+    <linearGradient id="symbol" x1="390" y1="470" x2="612" y2="688" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFD18C"/>
+      <stop offset="0.56" stop-color="#F6A24A"/>
+      <stop offset="1" stop-color="#E86E3B"/>
     </linearGradient>
   </defs>
+
   <rect x="96" y="96" width="832" height="832" rx="216" fill="url(#bg)"/>
-  <rect x="96" y="96" width="832" height="832" rx="216" fill="url(#glow)"/>
-  <path d="M681.63 194.004C746.478 194.004 807.266 214.626 857.092 250.861C880.72 268.052 885.453 301.233 867.742 324.474L795.368 419.425C778.086 442.09 745.919 448.292 720.798 434.362C685.59 414.843 646.608 402.491 605.89 397.903L621.487 208.658C641.198 211.173 661.329 194.004 681.63 194.004Z" fill="url(#accent)"/>
-  <circle cx="438" cy="566" r="286" fill="url(#disc)"/>
-  <circle cx="438" cy="566" r="286" stroke="#FFF8EE" stroke-opacity="0.32" stroke-width="20"/>
-  <circle cx="306" cy="430" r="54" fill="#17374C"/>
-  <circle cx="526" cy="396" r="50" fill="#17374C"/>
-  <circle cx="590" cy="612" r="58" fill="#17374C"/>
-  <circle cx="344" cy="680" r="46" fill="#17374C"/>
-  <circle cx="438" cy="566" r="126" fill="#111E2F"/>
-  <circle cx="438" cy="566" r="126" stroke="#F7A553" stroke-width="26"/>
-  <path d="M401 497.338C401 480.412 419.31 469.858 433.939 478.395L556.649 549.999C571.124 558.446 571.124 579.354 556.649 587.801L433.939 659.405C419.31 667.942 401 657.388 401 640.462V497.338Z" fill="#F6B46A"/>
-  <path d="M714 730C773.563 704.545 820.036 657.254 846.814 598.609" stroke="#F29E5A" stroke-width="34" stroke-linecap="round"/>
-  <path d="M216 792C262.867 820.477 316.519 837.515 372.5 841.584" stroke="#89E6EA" stroke-opacity="0.7" stroke-width="18" stroke-linecap="round"/>
-  <path d="M714 730L840 716L790 831" stroke="#F7A24D" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="96" y="96" width="832" height="832" rx="216" fill="url(#skyGlow)"/>
+  <rect x="96" y="96" width="832" height="832" rx="216" fill="url(#emberGlow)"/>
+  <rect x="108" y="108" width="808" height="808" rx="204" stroke="#F6FBFF" stroke-opacity="0.09" stroke-width="12"/>
+
+  <ellipse cx="468" cy="702" rx="312" ry="118" fill="#02060D" fill-opacity="0.34"/>
+
+  <path d="M686 192C749.923 192 809.949 212.311 859.158 247.999C882.565 264.975 887.253 297.754 869.709 320.704L791.795 422.62C773.767 446.205 740.291 452.737 714.103 438.057C676.754 417.122 635.282 403.83 591.998 399.176L608.391 206.895C633.449 205.895 660.129 192 686 192Z" fill="url(#ribbon)"/>
+
+  <circle cx="434" cy="582" r="292" fill="url(#vinyl)"/>
+  <circle cx="434" cy="582" r="292" stroke="#FCFEFF" stroke-opacity="0.13" stroke-width="14"/>
+  <circle cx="434" cy="582" r="244" stroke="#9BE7EA" stroke-opacity="0.11" stroke-width="10"/>
+  <circle cx="434" cy="582" r="214" stroke="#F7F8FA" stroke-opacity="0.05" stroke-width="8"/>
+  <circle cx="434" cy="582" r="182" stroke="#F7F8FA" stroke-opacity="0.05" stroke-width="8"/>
+  <circle cx="434" cy="582" r="150" stroke="#F7F8FA" stroke-opacity="0.05" stroke-width="8"/>
+
+  <path d="M216 794C262.114 821.935 314.874 838.849 369.98 843.261" stroke="#87E6EA" stroke-opacity="0.9" stroke-width="18" stroke-linecap="round"/>
+  <path d="M704 734C766.421 707.863 815.109 659.12 843.181 598.706" stroke="#F7A04D" stroke-width="32" stroke-linecap="round"/>
+  <path d="M705 734L836 719L784 832" stroke="#FFAE4E" stroke-width="32" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <circle cx="434" cy="582" r="156" fill="url(#label)"/>
+  <circle cx="434" cy="582" r="156" stroke="#F7A452" stroke-width="24"/>
+  <circle cx="434" cy="582" r="118" fill="url(#core)"/>
+  <circle cx="434" cy="582" r="118" stroke="#FFF4E6" stroke-opacity="0.08" stroke-width="8"/>
+
+  <path
+    d="M409 292C392 292 378 306 378 323V641C378 658 392 672 409 672H501C594 672 654 627 654 559C654 510 628 475 581 463C616 449 639 419 639 377C639 319 591 292 506 292H409ZM449 345V464H500C548 464 576 442 576 408C576 371 548 345 500 345H449ZM449 531V619H513C565 619 596 604 596 571C596 537 565 531 510 531H449Z"
+    fill="url(#symbol)"
+    fill-rule="evenodd"
+    clip-rule="evenodd"
+    transform="translate(116 283) scale(0.62)"
+  />
 </svg>

@@ -41,6 +41,8 @@ const CONTROLS_ROW_PADDING = 12;
 // Regular seeker bar row height — matches the visual track height;
 // the thumb overflows via overflow-visible on the container
 const REGULAR_SEEKER_HEIGHT = 3;
+const WAVEFORM_SEEKER_TOP_PADDING = 12;
+const WAVEFORM_SEEKER_SIDE_PADDING = 16;
 
 interface Props {
   onLyricsToggle: () => void;
@@ -111,16 +113,17 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
   const elapsed = formatTime(player.currentTime);
   const total = formatTime(player.duration);
   const progressPct = player.duration > 0 ? (player.currentTime / player.duration) * 100 : 0;
+  const isWaveformSeeker = appSettings.playerSeekerStyle === 'waveform';
 
-  const seekerRowHeight = appSettings.playerSeekerStyle === 'waveform'
-    ? appSettings.waveformHeight
+  const seekerRowHeight = isWaveformSeeker
+    ? appSettings.waveformHeight + WAVEFORM_SEEKER_TOP_PADDING
     : REGULAR_SEEKER_HEIGHT;
 
   const playerPanelHeight = CONTROLS_ROW_HEIGHT + CONTROLS_ROW_PADDING * 2 + seekerRowHeight;
 
   return (
     <div
-      className="shrink-0 bg-zinc-900/90 flex flex-col z-10"
+      className={`shrink-0 bg-zinc-950 flex flex-col z-10 ${isWaveformSeeker ? 'border-t border-zinc-800' : ''}`}
       style={{ height: playerPanelHeight }}
     >
       {/* ── Full-width seeker ──────────────────────────────────────────────── */}
@@ -128,7 +131,7 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
         className="relative w-full shrink-0 overflow-visible z-10"
         style={{ height: seekerRowHeight }}
         onMouseMove={(e) => {
-          if (appSettings.playerSeekerStyle === 'waveform') return;
+          if (isWaveformSeeker) return;
           const rect = e.currentTarget.getBoundingClientRect();
           const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
           setSeekerHover({ x: e.clientX - rect.left, time: pct * (player.duration || 0) });
@@ -144,8 +147,16 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
           </div>
         )}
 
-        {appSettings.playerSeekerStyle === 'waveform' ? (
-          <WaveformSeeker className="w-full min-w-0" />
+        {isWaveformSeeker ? (
+          <div
+            className="h-full box-border"
+            style={{
+              paddingTop: WAVEFORM_SEEKER_TOP_PADDING,
+              paddingInline: WAVEFORM_SEEKER_SIDE_PADDING,
+            }}
+          >
+            <WaveformSeeker className="w-full min-w-0" />
+          </div>
         ) : (
           <>
             {/* Track background */}
