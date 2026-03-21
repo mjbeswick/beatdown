@@ -16,6 +16,9 @@ interface Props {
   className?: string;
 }
 
+const SELECT_CLASS = 'w-full bg-zinc-700/60 border border-zinc-600/50 rounded-lg text-sm text-zinc-300 px-3 py-1.5 pr-7 cursor-pointer hover:bg-zinc-700 transition-colors appearance-none outline-none';
+const SELECT_WRAP_CLASS = 'relative w-[clamp(12rem,34%,18rem)] shrink-0';
+
 const SEEKER_STYLE_OPTIONS: { value: PlayerSeekerStyle; label: string }[] = [
   { value: 'bar', label: 'Progress bar' },
   { value: 'waveform', label: 'Mini waveform' },
@@ -41,11 +44,11 @@ export default function WaveformSettingsCard({
             <p className="text-zinc-300 text-sm">Player seeker</p>
             <p className="mt-0.5 text-zinc-500 text-xs">Choose between the classic progress bar and a compact waveform.</p>
           </div>
-          <div className="relative shrink-0">
+          <div className={SELECT_WRAP_CLASS}>
             <select
               value={appSettings.playerSeekerStyle}
               onChange={(e) => patchAppSettings({ playerSeekerStyle: e.target.value as PlayerSeekerStyle })}
-              className="bg-zinc-700/60 border border-zinc-600/50 rounded-lg text-sm text-zinc-300 px-3 py-1.5 pr-7 cursor-pointer hover:bg-zinc-700 transition-colors appearance-none outline-none"
+              className={SELECT_CLASS}
             >
               {SEEKER_STYLE_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>{option.label}</option>

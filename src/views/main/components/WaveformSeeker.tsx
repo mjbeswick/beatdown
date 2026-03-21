@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import WaveSurfer from 'wavesurfer.js';
 import { useUnit } from 'effector-react';
 import { $player, seek, getStreamUrl } from '../stores/player';
@@ -39,6 +39,7 @@ export default function WaveformSeeker({ className = 'w-full min-w-0' }: Props) 
   playerIsPlayingRef.current = player.isPlaying;
   const [ready, setReady] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [hoverTime, setHoverTime] = useState<{ x: number; time: number } | null>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -131,6 +132,12 @@ export default function WaveformSeeker({ className = 'w-full min-w-0' }: Props) 
     seek(Math.max(0, Math.min(nextTime, duration)));
   };
 
+  const handleMouseMove = (event: ReactMouseEvent<HTMLDivElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const pct = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+    setHoverTime({ x: event.clientX - rect.left, time: pct * (player.duration || 0) });
+  };
+
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     const step = Math.max(1, Math.min(10, Math.floor((player.duration || 0) / 50) || 5));
 
@@ -160,7 +167,7 @@ export default function WaveformSeeker({ className = 'w-full min-w-0' }: Props) 
 
   return (
     <div
-      className={`${className} relative overflow-hidden rounded-sm focus:outline-none focus-visible:ring-1 focus-visible:ring-emerald-500/70`}
+      className={`${className} relative overflow-visible focus:outline-none focus-visible:ring-1 focus-visible:ring-emerald-500/70`}
       style={{ height: waveformHeight }}
       tabIndex={0}
       role="slider"
@@ -170,7 +177,17 @@ export default function WaveformSeeker({ className = 'w-full min-w-0' }: Props) 
       aria-valuenow={Math.min(player.currentTime, player.duration || 0)}
       aria-valuetext={`${formatTime(player.currentTime)} of ${formatTime(player.duration)}`}
       onKeyDown={handleKeyDown}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={() => setHoverTime(null)}
     >
+      {hoverTime !== null && (
+        <div
+          className="absolute bottom-full mb-1.5 -translate-x-1/2 bg-zinc-800 border border-zinc-700/80 text-zinc-200 text-[10px] font-mono px-1.5 py-0.5 rounded shadow-lg pointer-events-none z-50 whitespace-nowrap"
+          style={{ left: hoverTime.x }}
+        >
+          {formatTime(hoverTime.time)}
+        </div>
+      )}
       {loading && (
         <div className="absolute inset-0 flex items-end gap-px overflow-hidden">
           {SKELETON_HEIGHTS.map((h, i) => (
@@ -184,7 +201,7 @@ export default function WaveformSeeker({ className = 'w-full min-w-0' }: Props) 
       )}
       <div
         ref={containerRef}
-        className={`h-full w-full transition-opacity duration-200 ${ready ? 'opacity-100' : 'opacity-0 absolute inset-0'}`}
+        className={`h-full w-full overflow-hidden rounded-sm transition-opacity duration-200 ${ready ? 'opacity-100' : 'opacity-0 absolute inset-0'}`}
       />
     </div>
   );

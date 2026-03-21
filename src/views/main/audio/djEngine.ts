@@ -12,8 +12,8 @@
  *
  * Falls back to plain crossfade when BPM data is unavailable.
  *
- * Manual skips (user presses Next) are also crossfaded when the next track is
- * already preloaded; otherwise the engine falls through to an instant change.
+ * Manual navigation falls through to an immediate track change. Beatmatching is
+ * only used for automatic transitions near the end of a track.
  *
  * DJ mixing is disabled when casting (the cast device handles its own playback
  * and doesn't benefit from a local Web Audio crossfade).
@@ -25,7 +25,6 @@ import {
   getActiveDeckGain,
   getInactiveDeckGain,
   getAudioContext,
-  getLoadedTrackId,
   ensureDeckBConnected,
   swapDecks,
   setCrossfadeInProgress,
@@ -45,16 +44,10 @@ let nextTrackSrc: string | null = null;
 let inactiveDeckReady = false;
 let incomingBpmReady = false;
 let outgoingBpmReady = false;
-// ID of the track that was playing when we began preloading — used to look up
-// the outgoing BPM even after the player has already advanced (manual navigation).
+// ID of the track that was playing when we began preloading — used for
+// outgoing BPM lookup and crossfade validation.
 let outgoingTrackId: string | null = null;
 let crossfadeTimer: ReturnType<typeof setTimeout> | null = null;
-// True when the crossfade was initiated by a manual skip; completeCrossfade()
-// skips trackEnded() in that case because the queue already advanced.
-let manualSkip = false;
-// Set when user manually skips while we're still in 'preloading' state.
-// The crossfade starts as soon as preloading completes.
-let pendingManualSkip = false;
 let preloadDeck: HTMLAudioElement | null = null;
 let preloadCanPlayHandler: EventListener | null = null;
 
@@ -103,8 +96,6 @@ function reset(): void {
   incomingBpmReady = false;
   outgoingBpmReady = false;
   outgoingTrackId = null;
-  manualSkip = false;
-  pendingManualSkip = false;
   setCrossfadeInProgress(false);
 }
 
@@ -113,14 +104,11 @@ function beginPreload(
   src: string,
   outgoingId: string | null,
   outgoingSrc: string | null,
-  isManualNavigation: boolean,
 ): void {
   state = 'preloading';
   nextTrack = track;
   nextTrackSrc = src;
   outgoingTrackId = outgoingId;
-  manualSkip = isManualNavigation;
-  pendingManualSkip = false;
 
   const { djMode } = $appSettings.getState();
   inactiveDeckReady = false;
@@ -242,13 +230,6 @@ function markPreloaded(): void {
 
   state = 'preloaded';
 
-  if (pendingManualSkip) {
-    pendingManualSkip = false;
-    manualSkip = true;
-    startCrossfade();
-    return;
-  }
-
   // Immediately check the active deck's position rather than waiting for the
   // next timeupdate — this handles seeks that land past the trigger point
   // while we were still buffering the next track.
@@ -259,33 +240,24 @@ function markPreloaded(): void {
     const { djMode, crossfadeDuration } = $appSettings.getState();
     const lookAhead = djMode === 'gapless' ? 0.1 : crossfadeDuration;
     if (currentTime >= Math.max(0, duration - lookAhead)) {
-      manualSkip = false;
       startCrossfade();
     }
   }
 }
 
-// ── Track-change hook: intercept manual skips ─────────────────────────────────
+// ── Track-change hook: cancel any staged preload on manual navigation ─────────
 //
-// engine.ts calls this before doing an immediate track reload.  If we have the
-// incoming track already preloaded we start the crossfade and return true so
-// engine.ts skips the reload entirely.
+// engine.ts calls this before doing an immediate track reload. Manual track
+// changes should happen immediately, so this hook only tears down any preload
+// state the DJ engine was holding onto and lets engine.ts continue.
 
 registerTrackChangeHook((trackId, _src) => {
   if (!isDjActive()) return false;
   const targetTrack = $player.getState().current;
   if (!targetTrack || targetTrack.track.id !== trackId) return false;
 
-  if (nextTrack?.track.id === trackId && state === 'preloaded') {
-    // Incoming track is fully preloaded — start crossfade immediately.
-    manualSkip = true;
-    startCrossfade();
-    return true; // prevent engine.ts from reloading
-  }
-
-  // Manual navigation should only wait on the DJ engine when the incoming
-  // track is already fully preloaded. Otherwise fall through to the normal
-  // engine.ts path so "Next" changes tracks immediately.
+  // Manual navigation should cancel any staged DJ transition so engine.ts can
+  // reload the selected track immediately.
   if (state !== 'idle') {
     reset();
   }
@@ -305,13 +277,8 @@ $player.watch((player) => {
   // ── Guard: abort if nav invalidated our preloaded state ───────────────────
   if (state === 'preloading' || state === 'preloaded') {
     if (nextTrack) {
-      // If we intercepted a manual skip the queue has already advanced, so
-      // nextTrack is now *current* rather than queue[queueIndex+1].
-      // Only abort if neither position matches what we preloaded.
       const expectedNext = queue[queueIndex + 1];
-      const isCurrentTrack = current?.track.id === nextTrack.track.id;
-      const isNextTrack = expectedNext?.track.id === nextTrack.track.id;
-      if (!isCurrentTrack && !isNextTrack) {
+      if (expectedNext?.track.id !== nextTrack.track.id) {
         reset();
       }
     }
@@ -319,7 +286,7 @@ $player.watch((player) => {
 
   // ── Guard: abort an in-progress crossfade if user navigated away ──────────
   if (state === 'crossfading' && current) {
-    const expectedCurrentId = manualSkip ? nextTrack?.track.id : outgoingTrackId;
+    const expectedCurrentId = outgoingTrackId;
     if (expectedCurrentId && current.track.id !== expectedCurrentId) {
       // Player moved to an unexpected track — abort the crossfade cleanly
       reset();
@@ -341,7 +308,6 @@ $player.watch((player) => {
       getStreamUrl(upcoming.track.filePath, streamPort),
       current.track.id,
       current.track.filePath ? getStreamUrl(current.track.filePath, streamPort) : null,
-      false,
     );
 
     return;
@@ -355,7 +321,6 @@ $player.watch((player) => {
     const lookAhead = djMode === 'gapless' ? 0.1 : crossfadeDuration;
     const triggerAt = Math.max(0, duration - lookAhead);
     if (currentTime >= triggerAt) {
-      manualSkip = false;
       startCrossfade();
     }
   }
@@ -462,7 +427,6 @@ function completeCrossfade(incomingRate: number): void {
 
   const nxt = nextTrack!;
   const src = nextTrackSrc!;
-  const wasManualSkip = manualSkip;
 
   // Promote the incoming deck; update lastTrackId/lastSrc in engine so the
   // next $player.watch() call recognises the track as already loaded.
@@ -472,12 +436,7 @@ function completeCrossfade(incomingRate: number): void {
   nextTrack = null;
   nextTrackSrc = null;
   outgoingTrackId = null;
-  manualSkip = false;
   setCrossfadeInProgress(false);
 
-  if (!wasManualSkip) {
-    // Time-based crossfade: advance the queue now.
-    trackEnded();
-  }
-  // Manual skip: store already advanced when user pressed Next.
+  trackEnded();
 }

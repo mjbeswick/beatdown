@@ -24,7 +24,7 @@ export default function Sidebar() {
       <div className="px-3">
         <button
           onClick={() => navChanged('nowplaying')}
-          className={`w-full flex items-center gap-2.5 px-2 py-1.5 text-sm rounded-md transition-colors ${
+          className={`w-full flex items-center gap-2 px-2 py-1 text-sm rounded-md transition-colors ${
             nav === 'nowplaying'
               ? 'bg-zinc-700/70 text-zinc-100 font-medium'
               : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700/30'
@@ -54,7 +54,7 @@ export default function Sidebar() {
           <button
             key={key}
             onClick={() => navChanged(key)}
-            className={`w-full flex items-center gap-2.5 px-2 py-1.5 text-sm rounded-md transition-colors ${
+            className={`w-full flex items-center gap-2 px-2 py-1 text-sm rounded-md transition-colors ${
               nav === key
                 ? 'bg-zinc-700/70 text-zinc-100 font-medium'
                 : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700/30'
@@ -70,7 +70,7 @@ export default function Sidebar() {
       <div className="px-3 pt-2">
         <button
           onClick={() => navChanged('settings')}
-          className={`w-full flex items-center gap-2.5 px-2 py-1.5 text-sm rounded-md transition-colors ${
+          className={`w-full flex items-center gap-2 px-2 py-1 text-sm rounded-md transition-colors ${
             nav === 'settings'
               ? 'bg-zinc-700/70 text-zinc-100 font-medium'
               : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700/30'

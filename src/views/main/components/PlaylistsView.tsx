@@ -142,8 +142,8 @@ function PlaylistListItem({ item, isSelected, onSelect }: PlaylistListItemProps)
   const primaryDownloadAction = getPrimaryDownloadAction(item);
   const showStatus = item.status !== 'done' && item.status !== 'error';
   const sizeLabel = item.sizeOnDiskBytes > 0 ? formatBytes(item.sizeOnDiskBytes) : null;
+  const isDownloading = ACTIVE_DOWNLOAD_STATUSES.includes(item.status);
   const progressPct = item.totalTracks > 0 ? (playableTracks.length / item.totalTracks) * 100 : 0;
-  const isComplete = item.totalTracks > 0 && playableTracks.length >= item.totalTracks;
 
   const menuItems: ContextMenuEntry[] = [];
 
@@ -198,10 +198,18 @@ function PlaylistListItem({ item, isSelected, onSelect }: PlaylistListItemProps)
           onSelect(item.id);
           open(event);
         }}
-        className={`flex items-center gap-2.5 px-3 py-2 cursor-pointer border-b border-zinc-800/60 last:border-b-0 transition-colors ${
+        className={`relative flex items-center gap-2.5 px-3 py-2 cursor-pointer border-b border-zinc-800/60 last:border-b-0 transition-colors ${
           isSelected ? 'bg-zinc-700/50' : 'hover:bg-zinc-800/30'
         }`}
       >
+        {isDownloading && (
+          <div
+            className="pointer-events-none absolute inset-0"
+            style={{
+              backgroundImage: `linear-gradient(to right, rgba(16,185,129,0.13) ${progressPct}%, transparent ${progressPct}%)`,
+            }}
+          />
+        )}
         <div className="w-8 h-8 rounded overflow-hidden bg-zinc-700 flex items-center justify-center shrink-0">
           {item.coverArt ? (
             <img src={item.coverArt} alt="" className="w-full h-full object-cover" />
@@ -222,14 +230,6 @@ function PlaylistListItem({ item, isSelected, onSelect }: PlaylistListItemProps)
               </span>
             ) : null}
           </div>
-          {item.totalTracks > 0 && (
-            <div className="mt-1 h-[2px] bg-zinc-700/60 rounded-full overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all duration-500 ${isComplete ? 'bg-emerald-500' : 'bg-emerald-400/50'}`}
-                style={{ width: `${progressPct}%` }}
-              />
-            </div>
-          )}
         </div>
       </div>
 

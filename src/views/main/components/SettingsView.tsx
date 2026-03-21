@@ -79,6 +79,11 @@ const VISUALIZER_CYCLE_ORDERS = [
   { value: 'sequential', label: 'Sequential' },
 ] as const;
 
+const SELECT_CLASS = 'w-full bg-zinc-700/60 border border-zinc-600/50 rounded-lg text-sm text-zinc-300 px-3 py-1.5 pr-7 cursor-pointer hover:bg-zinc-700 transition-colors appearance-none outline-none';
+const SELECT_WRAP_CLASS = 'relative w-[clamp(12rem,34%,18rem)] shrink-0';
+const WIDE_SELECT_WRAP_CLASS = 'relative w-[clamp(14rem,42%,24rem)] shrink-0';
+const SETTINGS_CARD_CLASS = 'bg-zinc-800/50 border border-zinc-700/60 rounded-xl overflow-hidden';
+
 export default function SettingsView() {
   const theme = useUnit($theme);
   const appSettings = useUnit($appSettings);
@@ -145,20 +150,20 @@ export default function SettingsView() {
   return (
     <main className="flex-1 overflow-y-auto p-6">
       <h2 className="text-zinc-200 text-base font-semibold mb-5 text-center">Settings</h2>
-      <div className="space-y-2 max-w-md mx-auto">
+      <div className="mx-auto flex w-full max-w-[46rem] flex-col gap-3">
 
         {/* Appearance */}
-        <div className="bg-zinc-800/50 border border-zinc-700/60 rounded-xl overflow-hidden">
+        <div className={SETTINGS_CARD_CLASS}>
           <div className="px-4 pt-3 pb-1">
             <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500 mb-2">Appearance</p>
           </div>
-          <div className="flex items-center justify-between px-4 pb-3">
+          <div className="flex items-center justify-between gap-4 px-4 pb-3">
             <span className="text-zinc-300 text-sm">Theme</span>
-            <div className="relative">
+            <div className={SELECT_WRAP_CLASS}>
               <select
                 value={theme}
                 onChange={(e) => themeChanged(e.target.value as ThemeOption)}
-                className="bg-zinc-700/60 border border-zinc-600/50 rounded-lg text-sm text-zinc-300 px-3 py-1.5 pr-7 cursor-pointer hover:bg-zinc-700 transition-colors appearance-none outline-none"
+                className={SELECT_CLASS}
               >
                 {THEMES.map((t) => (
                   <option key={t.value} value={t.value}>{t.label}</option>
@@ -174,22 +179,22 @@ export default function SettingsView() {
         <DjSettingsCard />
 
         {/* Downloads */}
-        <div className="bg-zinc-800/50 border border-zinc-700/60 rounded-xl overflow-hidden">
+        <div className={SETTINGS_CARD_CLASS}>
           <div className="px-4 pt-3 pb-1">
             <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500 mb-2">Downloads</p>
           </div>
 
           {/* Format */}
-          <div className="flex items-center justify-between px-4 py-2.5 border-t border-zinc-700/40">
+          <div className="flex items-center justify-between gap-4 px-4 py-2.5 border-t border-zinc-700/40">
             <div className="flex items-center gap-2">
               <Music size={13} className="text-zinc-500" />
               <span className="text-zinc-300 text-sm">Format</span>
             </div>
-            <div className="relative">
+            <div className={SELECT_WRAP_CLASS}>
               <select
                 value={format}
                 onChange={(e) => setFormat(e.target.value as AudioFormat)}
-                className="bg-zinc-700/60 border border-zinc-600/50 rounded-lg text-sm text-zinc-300 px-3 py-1.5 pr-7 cursor-pointer hover:bg-zinc-700 transition-colors appearance-none outline-none"
+                className={SELECT_CLASS}
               >
                 {FORMATS.map((f) => (
                   <option key={f.value} value={f.value}>{f.label}</option>
@@ -200,16 +205,16 @@ export default function SettingsView() {
           </div>
 
           {/* Quality */}
-          <div className="flex items-center justify-between px-4 py-2.5 border-t border-zinc-700/40">
+          <div className="flex items-center justify-between gap-4 px-4 py-2.5 border-t border-zinc-700/40">
             <div className="flex items-center gap-2">
               <Gauge size={13} className="text-zinc-500" />
               <span className="text-zinc-300 text-sm">Quality</span>
             </div>
-            <div className="relative">
+            <div className={WIDE_SELECT_WRAP_CLASS}>
               <select
                 value={quality}
                 onChange={(e) => setQuality(e.target.value as QualityPreset)}
-                className="bg-zinc-700/60 border border-zinc-600/50 rounded-lg text-sm text-zinc-300 px-3 py-1.5 pr-7 cursor-pointer hover:bg-zinc-700 transition-colors appearance-none outline-none"
+                className={SELECT_CLASS}
               >
                 {QUALITIES.map((q) => (
                   <option key={q.value} value={q.value}>{q.label}</option>
@@ -220,7 +225,7 @@ export default function SettingsView() {
           </div>
 
           {/* Parallel downloads */}
-          <div className="flex items-center justify-between px-4 py-2.5 border-t border-zinc-700/40">
+          <div className="flex items-center justify-between gap-4 px-4 py-2.5 border-t border-zinc-700/40">
             <div className="flex items-center gap-2">
               <Layers size={13} className="text-zinc-500" />
               <span className="text-zinc-300 text-sm">Parallel downloads</span>
@@ -239,10 +244,10 @@ export default function SettingsView() {
             </div>
           </div>
 
-          <div className="flex items-center justify-between px-4 py-2.5 border-t border-zinc-700/40">
-            <div className="flex items-center gap-2">
+          <div className="flex items-center justify-between gap-4 px-4 py-2.5 border-t border-zinc-700/40">
+            <div className="flex min-w-0 items-center gap-2">
               <Trash2 size={13} className="text-zinc-500" />
-                <span className="text-zinc-300 text-sm">Confirm before deleting tracks or playlists</span>
+              <span className="text-zinc-300 text-sm">Confirm before deleting tracks or playlists</span>
             </div>
             <input
               type="checkbox"
@@ -253,12 +258,12 @@ export default function SettingsView() {
           </div>
 
           {/* Library location */}
-          <div className="flex items-center justify-between px-4 py-2.5 border-t border-zinc-700/40">
-            <div className="flex items-center gap-2 min-w-0">
+          <div className="flex items-center justify-between gap-4 px-4 py-2.5 border-t border-zinc-700/40">
+            <div className="flex min-w-0 flex-1 items-center gap-2">
               <FolderOpen size={13} className="text-zinc-500 shrink-0" />
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <span className="text-zinc-300 text-sm block">Library</span>
-                <code className="text-zinc-500 text-[11px] font-mono truncate block max-w-[200px]">
+                <code className="text-zinc-500 text-[11px] font-mono truncate block max-w-full">
                   {reelPaths ? shortenPath(reelPaths.libraryDir) : '…'}
                 </code>
               </div>
@@ -273,12 +278,12 @@ export default function SettingsView() {
           </div>
 
           {/* Playlists location */}
-          <div className="flex items-center justify-between px-4 py-2.5 border-t border-zinc-700/40">
-            <div className="flex items-center gap-2 min-w-0">
+          <div className="flex items-center justify-between gap-4 px-4 py-2.5 border-t border-zinc-700/40">
+            <div className="flex min-w-0 flex-1 items-center gap-2">
               <FolderOpen size={13} className="text-zinc-500 shrink-0" />
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <span className="text-zinc-300 text-sm block">Playlists</span>
-                <code className="text-zinc-500 text-[11px] font-mono truncate block max-w-[200px]">
+                <code className="text-zinc-500 text-[11px] font-mono truncate block max-w-full">
                   {reelPaths ? shortenPath(reelPaths.playlistsDir) : '…'}
                 </code>
               </div>
@@ -294,21 +299,21 @@ export default function SettingsView() {
         </div>
 
         {/* Visualizer */}
-        <div className="bg-zinc-800/50 border border-zinc-700/60 rounded-xl overflow-hidden">
+        <div className={SETTINGS_CARD_CLASS}>
           <div className="px-4 pt-3 pb-1">
             <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500 mb-2">Visualizer</p>
           </div>
 
-          <div className="flex items-center justify-between px-4 py-2.5 border-t border-zinc-700/40">
+          <div className="flex items-center justify-between gap-4 px-4 py-2.5 border-t border-zinc-700/40">
             <div className="flex items-center gap-2 min-w-0">
               <AudioWaveform size={13} className="text-zinc-500 shrink-0" />
               <span className="text-zinc-300 text-sm">Preset</span>
             </div>
-            <div className="relative max-w-[58%]">
+            <div className={WIDE_SELECT_WRAP_CLASS}>
               <select
                 value={selectedPresetName}
                 onChange={(e) => setVisualizerPresetName(e.target.value)}
-                className="w-full bg-zinc-700/60 border border-zinc-600/50 rounded-lg text-sm text-zinc-300 px-3 py-1.5 pr-7 cursor-pointer hover:bg-zinc-700 transition-colors appearance-none outline-none truncate"
+                className={`${SELECT_CLASS} truncate`}
                 disabled={presetCatalog.length === 0 || loadingPresetCatalog}
               >
                 {presetCatalog.length === 0 ? (
@@ -323,12 +328,12 @@ export default function SettingsView() {
             </div>
           </div>
 
-          <div className="flex items-center justify-between px-4 py-2.5 border-t border-zinc-700/40">
-            <div className="flex items-center gap-2 min-w-0">
+          <div className="flex items-center justify-between gap-4 px-4 py-2.5 border-t border-zinc-700/40">
+            <div className="flex min-w-0 flex-1 items-center gap-2">
               <FolderOpen size={13} className="text-zinc-500 shrink-0" />
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <span className="text-zinc-300 text-sm block">Custom preset folder</span>
-                <code className="text-zinc-500 text-[11px] font-mono truncate block max-w-[160px]">
+                <code className="text-zinc-500 text-[11px] font-mono truncate block max-w-full">
                   {reelPaths?.visualizerPresetsDir
                     ? shortenPath(reelPaths.visualizerPresetsDir)
                     : 'None'}
@@ -361,13 +366,13 @@ export default function SettingsView() {
             </div>
           </div>
 
-          <div className="flex items-center justify-between px-4 py-2.5 border-t border-zinc-700/40">
+          <div className="flex items-center justify-between gap-4 px-4 py-2.5 border-t border-zinc-700/40">
             <span className="text-zinc-300 text-sm">Rendering profile</span>
-            <div className="relative">
+            <div className={SELECT_WRAP_CLASS}>
               <select
                 value={visualizerSettings.quality}
                 onChange={(e) => setVisualizerQuality(e.target.value as typeof visualizerSettings.quality)}
-                className="bg-zinc-700/60 border border-zinc-600/50 rounded-lg text-sm text-zinc-300 px-3 py-1.5 pr-7 cursor-pointer hover:bg-zinc-700 transition-colors appearance-none outline-none"
+                className={SELECT_CLASS}
               >
                 {VISUALIZER_QUALITIES.map((quality) => (
                   <option key={quality.value} value={quality.value}>{quality.label}</option>
@@ -387,13 +392,13 @@ export default function SettingsView() {
             />
           </div>
 
-          <div className="flex items-center justify-between px-4 py-2.5 border-t border-zinc-700/40">
+          <div className="flex items-center justify-between gap-4 px-4 py-2.5 border-t border-zinc-700/40">
             <span className="text-zinc-300 text-sm">Mesh detail</span>
-            <div className="relative">
+            <div className={SELECT_WRAP_CLASS}>
               <select
                 value={visualizerSettings.meshDensity}
                 onChange={(e) => setVisualizerMeshDensity(e.target.value as typeof visualizerSettings.meshDensity)}
-                className="bg-zinc-700/60 border border-zinc-600/50 rounded-lg text-sm text-zinc-300 px-3 py-1.5 pr-7 cursor-pointer hover:bg-zinc-700 transition-colors appearance-none outline-none"
+                className={SELECT_CLASS}
               >
                 {VISUALIZER_MESH_DENSITIES.map((density) => (
                   <option key={density.value} value={density.value}>{density.label}</option>
@@ -403,13 +408,13 @@ export default function SettingsView() {
             </div>
           </div>
 
-          <div className="flex items-center justify-between px-4 py-2.5 border-t border-zinc-700/40">
+          <div className="flex items-center justify-between gap-4 px-4 py-2.5 border-t border-zinc-700/40">
             <span className="text-zinc-300 text-sm">Auto-cycle order</span>
-            <div className="relative">
+            <div className={SELECT_WRAP_CLASS}>
               <select
                 value={visualizerSettings.cycleOrder}
                 onChange={(e) => setVisualizerCycleOrder(e.target.value as typeof visualizerSettings.cycleOrder)}
-                className="bg-zinc-700/60 border border-zinc-600/50 rounded-lg text-sm text-zinc-300 px-3 py-1.5 pr-7 cursor-pointer hover:bg-zinc-700 transition-colors appearance-none outline-none"
+                className={SELECT_CLASS}
               >
                 {VISUALIZER_CYCLE_ORDERS.map((order) => (
                   <option key={order.value} value={order.value}>{order.label}</option>
@@ -501,11 +506,11 @@ export default function SettingsView() {
 
           <div className="flex items-center justify-between px-4 py-2.5 border-t border-zinc-700/40">
             <span className="text-zinc-300 text-sm">Frame rate</span>
-            <div className="relative">
+            <div className={SELECT_WRAP_CLASS}>
               <select
                 value={visualizerSettings.fps}
                 onChange={(e) => setVisualizerFps(Number(e.target.value) as VisualizerFps)}
-                className="bg-zinc-700/60 border border-zinc-600/50 rounded-lg text-sm text-zinc-300 px-3 py-1.5 pr-7 cursor-pointer hover:bg-zinc-700 transition-colors appearance-none outline-none"
+                className={SELECT_CLASS}
               >
                 <option value={24}>24 fps</option>
                 <option value={30}>30 fps</option>
@@ -518,7 +523,7 @@ export default function SettingsView() {
         </div>
 
         {/* Dependencies */}
-        <div className="bg-zinc-800/50 border border-zinc-700/60 rounded-xl overflow-hidden">
+        <div className={SETTINGS_CARD_CLASS}>
           <div className="px-4 pt-3 pb-1">
             <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500 mb-2">Dependencies</p>
           </div>
@@ -535,7 +540,7 @@ export default function SettingsView() {
         </div>
 
         {/* Keyboard shortcuts */}
-        <div className="bg-zinc-800/50 border border-zinc-700/60 rounded-xl overflow-hidden">
+        <div className={SETTINGS_CARD_CLASS}>
           <div className="px-4 pt-3 pb-1">
             <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500 mb-2">Keyboard Shortcuts</p>
           </div>

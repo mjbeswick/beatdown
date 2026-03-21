@@ -7,6 +7,9 @@ interface Props {
   className?: string;
 }
 
+const SELECT_CLASS = 'w-full bg-zinc-700/60 border border-zinc-600/50 rounded-lg text-sm text-zinc-300 px-3 py-1.5 pr-7 cursor-pointer hover:bg-zinc-700 transition-colors appearance-none outline-none';
+const SELECT_WRAP_CLASS = 'relative w-[clamp(12rem,34%,18rem)] shrink-0';
+
 const DJ_MODES: { value: DjMode; label: string; description: string }[] = [
   { value: 'off', label: 'Off', description: '' },
   { value: 'gapless', label: 'Gapless', description: 'Preloads the next track for seamless, gap-free transitions' },
@@ -43,11 +46,11 @@ export default function DjSettingsCard({
           <Disc3 size={13} className="text-zinc-500" />
           <span className="text-zinc-300 text-sm">Mode</span>
         </div>
-        <div className="relative">
+        <div className={SELECT_WRAP_CLASS}>
           <select
             value={settings.djMode}
             onChange={(e) => patchAppSettings({ djMode: e.target.value as DjMode })}
-            className="bg-zinc-700/60 border border-zinc-600/50 rounded-lg text-sm text-zinc-300 px-3 py-1.5 pr-7 cursor-pointer hover:bg-zinc-700 transition-colors appearance-none outline-none"
+            className={SELECT_CLASS}
           >
             {DJ_MODES.map((m) => (
               <option key={m.value} value={m.value}>
