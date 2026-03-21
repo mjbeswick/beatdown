@@ -35,8 +35,8 @@ import WaveformSeeker from './WaveformSeeker';
 // Ensure audio engine is initialized
 import '../audio/engine';
 
-const BASE_PLAYER_PANEL_CONTENT_HEIGHT = 58;
-const PLAYER_PANEL_VERTICAL_PADDING = 12;
+const BASE_PLAYER_PANEL_CONTENT_HEIGHT = 62;
+const PLAYER_PANEL_VERTICAL_PADDING = 14;
 const DEFAULT_WAVEFORM_HEIGHT = 18;
 
 interface Props {
@@ -51,6 +51,7 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
   const appSettings = useUnit($appSettings);
   const [castOpen, setCastOpen] = useState(false);
   const castRef = useRef<HTMLDivElement>(null);
+  const [seekerHover, setSeekerHover] = useState<{ x: number; time: number } | null>(null);
 
   // Close the cast popover when clicking outside
   useEffect(() => {
@@ -117,37 +118,37 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
 
   return (
     <div
-      className="shrink-0 bg-zinc-800/70 border-t border-zinc-700/60 grid items-center gap-x-5 px-4 z-10"
+      className="shrink-0 bg-zinc-900/90 border-t border-zinc-700/50 grid items-center gap-x-6 px-5 z-10"
       style={{
         height: playerPanelHeight,
         paddingBlock: PLAYER_PANEL_VERTICAL_PADDING,
-        gridTemplateColumns: 'minmax(0, 1fr) minmax(24rem, 46rem) minmax(0, 1fr)',
+        gridTemplateColumns: 'minmax(0, 1fr) minmax(24rem, 48rem) minmax(0, 1fr)',
       }}
     >
       {/* Track info */}
-      <div className="flex min-w-0 w-full max-w-[24rem] items-center gap-2.5 justify-self-start">
+      <div className="flex min-w-0 w-full max-w-[24rem] items-center gap-3 justify-self-start">
         <button
           onClick={() => navToAlbum(player.current!.downloadId)}
-          className="w-9 h-9 rounded bg-zinc-700 flex items-center justify-center shrink-0 overflow-hidden hover:ring-1 hover:ring-violet-500 transition-all"
+          className="w-10 h-10 rounded-md bg-zinc-700 flex items-center justify-center shrink-0 overflow-hidden hover:ring-1 hover:ring-violet-500 transition-all"
           title={`Go to album: ${player.current.albumName}`}
         >
           {player.current.coverArt ? (
             <img src={player.current.coverArt} alt="" className="w-full h-full object-cover" />
           ) : (
-            <Music2 size={14} className="text-zinc-500" />
+            <Music2 size={15} className="text-zinc-500" />
           )}
         </button>
         <div className="min-w-0 flex-1">
           <button
             onClick={() => navToAlbum(player.current!.downloadId)}
-            className="block text-zinc-200 text-xs font-medium truncate max-w-full hover:text-emerald-500 transition-colors text-left"
+            className="block text-zinc-100 text-[13px] font-medium truncate max-w-full hover:text-emerald-400 transition-colors text-left leading-snug"
             title={player.current.track.title}
           >
             {player.current.track.title}
           </button>
           <button
             onClick={() => navToArtist(player.current!.track.artist)}
-            className="block text-zinc-500 text-[11px] truncate max-w-full hover:text-emerald-500 transition-colors text-left"
+            className="block text-zinc-400 text-xs truncate max-w-full hover:text-emerald-400 transition-colors text-left leading-snug"
             title={player.current.track.artist}
           >
             {player.current.track.artist}
@@ -163,23 +164,23 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
           title={favourites.includes(player.current.track.id) ? 'Remove from favourites' : 'Add to favourites'}
         >
           <Heart
-            size={13}
+            size={14}
             className={favourites.includes(player.current.track.id) ? 'fill-rose-500' : ''}
           />
         </button>
       </div>
 
       {/* Controls + seeker */}
-      <div className="flex min-w-0 w-full flex-col gap-1.5">
-        <div className="flex items-center justify-center gap-3.5">
+      <div className="flex min-w-0 w-full flex-col gap-2">
+        <div className="flex items-center justify-center gap-4">
           <button
             onClick={() => toggleShuffle()}
             className={`transition-colors ${
-              player.shuffle === 'on' ? 'text-emerald-500' : 'text-zinc-500 hover:text-zinc-300'
+              player.shuffle === 'on' ? 'text-emerald-400' : 'text-zinc-500 hover:text-zinc-300'
             }`}
             title="Shuffle"
           >
-            <Shuffle size={14} />
+            <Shuffle size={15} />
           </button>
 
           <button
@@ -187,18 +188,18 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
             className="text-zinc-400 hover:text-zinc-200 transition-colors"
             title="Previous"
           >
-            <SkipBack size={16} />
+            <SkipBack size={17} />
           </button>
 
           <button
             onClick={() => togglePlay()}
-            className="w-8 h-8 rounded-full bg-white flex items-center justify-center hover:bg-zinc-200 transition-colors"
+            className="w-9 h-9 rounded-full bg-white flex items-center justify-center hover:bg-zinc-200 transition-colors shadow-sm"
             title={player.isPlaying ? 'Pause' : 'Play'}
           >
             {player.isPlaying ? (
-              <Pause size={14} className="text-black" />
+              <Pause size={15} className="text-black" />
             ) : (
-              <Play size={14} className="text-black fill-black ml-0.5" />
+              <Play size={15} className="text-black fill-black ml-0.5" />
             )}
           </button>
 
@@ -207,17 +208,17 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
             className="text-zinc-400 hover:text-zinc-200 transition-colors"
             title="Next"
           >
-            <SkipForward size={16} />
+            <SkipForward size={17} />
           </button>
 
           <button
             onClick={() => toggleRepeat()}
             className={`transition-colors ${
-              player.repeat !== 'off' ? 'text-emerald-500' : 'text-zinc-500 hover:text-zinc-300'
+              player.repeat !== 'off' ? 'text-emerald-400' : 'text-zinc-500 hover:text-zinc-300'
             }`}
             title={player.repeat === 'off' ? 'Repeat off' : player.repeat === 'all' ? 'Repeat all' : 'Repeat one'}
           >
-            {player.repeat === 'one' ? <Repeat1 size={14} /> : <Repeat size={14} />}
+            {player.repeat === 'one' ? <Repeat1 size={15} /> : <Repeat size={15} />}
           </button>
         </div>
 
@@ -229,7 +230,23 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
           {appSettings.playerSeekerStyle === 'waveform' ? (
             <WaveformSeeker className="flex-1 min-w-0" />
           ) : (
-            <div className="relative flex-1 h-3 flex items-center group">
+            <div
+              className="relative flex-1 h-3 flex items-center group"
+              onMouseMove={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+                setSeekerHover({ x: e.clientX - rect.left, time: pct * (player.duration || 0) });
+              }}
+              onMouseLeave={() => setSeekerHover(null)}
+            >
+              {seekerHover !== null && (
+                <div
+                  className="absolute bottom-full mb-2 -translate-x-1/2 bg-zinc-800 border border-zinc-700 text-zinc-200 text-[10px] font-mono px-1.5 py-0.5 rounded shadow-lg pointer-events-none z-50 whitespace-nowrap"
+                  style={{ left: seekerHover.x }}
+                >
+                  {formatTime(seekerHover.time)}
+                </div>
+              )}
               <input
                 type="range"
                 min={0}
@@ -249,13 +266,13 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
       </div>
 
       {/* Volume + lyrics + cast */}
-      <div className="flex min-w-0 w-full max-w-[24rem] items-center justify-end gap-1.5 justify-self-end">
+      <div className="flex min-w-0 w-full max-w-[24rem] items-center justify-end gap-2.5 justify-self-end">
         <button
           onClick={() => setVolume(player.volume > 0 ? 0 : (player.lastVolume || 0.8))}
-          className="text-zinc-500 hover:text-zinc-300 transition-colors shrink-0"
+          className="text-zinc-400 hover:text-zinc-200 transition-colors shrink-0"
           title={player.volume === 0 ? 'Unmute' : 'Mute'}
         >
-          {player.volume === 0 ? <VolumeX size={14} /> : <Volume2 size={14} />}
+          {player.volume === 0 ? <VolumeX size={15} /> : <Volume2 size={15} />}
         </button>
         <input
           type="range"
@@ -265,20 +282,20 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
           value={player.volume}
           onChange={(e) => setVolume(parseFloat(e.target.value))}
           disabled={cast.isCasting}
-          className={`w-18 h-1 appearance-none rounded-full volume-slider ${
+          className={`h-1 appearance-none rounded-full volume-slider ${
             cast.isCasting ? 'cursor-not-allowed opacity-40' : 'cursor-pointer'
           }`}
-          style={{ '--progress': `${player.volume * 100}%`, width: '72px' } as React.CSSProperties}
+          style={{ '--progress': `${player.volume * 100}%`, width: '84px' } as React.CSSProperties}
           title={cast.isCasting ? 'Local volume disabled while casting' : 'Volume'}
         />
         <button
           onClick={onLyricsToggle}
           className={`transition-colors shrink-0 ${
-            lyricsOpen ? 'text-emerald-500' : 'text-zinc-500 hover:text-zinc-300'
+            lyricsOpen ? 'text-emerald-400' : 'text-zinc-500 hover:text-zinc-300'
           }`}
           title="Lyrics"
         >
-          <Mic2 size={14} />
+          <Mic2 size={15} />
         </button>
 
         {/* Cast button + popover */}
@@ -286,11 +303,11 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
           <button
             onClick={handleCastClick}
             className={`transition-colors ${
-              cast.isCasting ? 'text-emerald-500' : 'text-zinc-500 hover:text-zinc-300'
+              cast.isCasting ? 'text-emerald-400' : 'text-zinc-500 hover:text-zinc-300'
             }`}
             title={cast.isCasting ? `Casting to ${cast.activeDevice?.name}` : 'Cast to device'}
           >
-            <Cast size={14} />
+            <Cast size={15} />
           </button>
 
           {castOpen && (

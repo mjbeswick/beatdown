@@ -142,6 +142,8 @@ function PlaylistListItem({ item, isSelected, onSelect }: PlaylistListItemProps)
   const primaryDownloadAction = getPrimaryDownloadAction(item);
   const showStatus = item.status !== 'done' && item.status !== 'error';
   const sizeLabel = item.sizeOnDiskBytes > 0 ? formatBytes(item.sizeOnDiskBytes) : null;
+  const progressPct = item.totalTracks > 0 ? (playableTracks.length / item.totalTracks) * 100 : 0;
+  const isComplete = item.totalTracks > 0 && playableTracks.length >= item.totalTracks;
 
   const menuItems: ContextMenuEntry[] = [];
 
@@ -220,6 +222,14 @@ function PlaylistListItem({ item, isSelected, onSelect }: PlaylistListItemProps)
               </span>
             ) : null}
           </div>
+          {item.totalTracks > 0 && (
+            <div className="mt-1 h-[2px] bg-zinc-700/60 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${isComplete ? 'bg-emerald-500' : 'bg-emerald-400/50'}`}
+                style={{ width: `${progressPct}%` }}
+              />
+            </div>
+          )}
         </div>
       </div>
 
@@ -420,9 +430,10 @@ export default function PlaylistsView() {
             </div>
 
             <div className="shrink-0 bg-zinc-800/60 border-b border-zinc-700/60 flex items-center gap-2 px-3 py-1.5 text-xs text-zinc-500 font-medium select-none">
-              <div className="w-[11px] shrink-0" />
-              <div className="flex-1 min-w-0">Title</div>
-              <div className="w-20 shrink-0" />
+              <div className="w-8 shrink-0" />
+              <div className="flex-[3] min-w-0">Title</div>
+              <div className="flex-[2] min-w-0">Artist</div>
+              <div className="w-16 shrink-0" />
             </div>
 
             <div className="flex-1 overflow-y-auto overflow-x-hidden">
