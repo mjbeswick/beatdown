@@ -24,7 +24,7 @@ function SpectrumAnalyzer({ style }: SpectrumAnalyzerProps) {
             ? {
                 mode: 10,
                 barSpace: 0,
-                gradient: 'classic' as const,
+                gradient: 'emerald' as const,
                 mirror: 0 as const,
                 fillAlpha: 0.38,
                 lineWidth: 1,
@@ -83,6 +83,8 @@ function SpectrumAnalyzer({ style }: SpectrumAnalyzerProps) {
           showPeaks: true,
           showScaleX: false,
           showScaleY: false,
+
+
         });
 
         // Register custom emerald gradient — matches the seek bar color
@@ -91,9 +93,6 @@ function SpectrumAnalyzer({ style }: SpectrumAnalyzerProps) {
           colorStops: ['#6ee7b7', '#10b981'],
         });
 
-        if (style !== 'dense') {
-          analyzer.setOptions({ gradient: 'emerald' });
-        }
 
         // Connect AudioMotion to the audio engine's analyser node
         try {

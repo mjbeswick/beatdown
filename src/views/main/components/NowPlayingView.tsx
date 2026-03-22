@@ -35,7 +35,6 @@ import ContextMenu, { type ContextMenuEntry } from './ContextMenu';
 import ResizablePaneLayout from './ResizablePaneLayout';
 import SpectrumAnalyzer from './SpectrumAnalyzer';
 import { useContextMenu } from '../hooks/useContextMenu';
-import { getAnalyserNode } from '../audio/engine';
 
 type Tab = 'queue' | 'lyrics';
 
@@ -96,56 +95,6 @@ export default function NowPlayingView({
     slots: [current?.coverArt, undefined],
     active: 0,
   });
-
-  // Refs for the two background image slots — driven directly by the energy RAF loop.
-  const bgImgRefs = useRef<(HTMLImageElement | null)[]>([null, null]);
-
-  // ── Background energy pulse ────────────────────────────────────────────────
-  // Reads bass energy from the analyser node and scales the background images
-  // subtly in time with the music. All DOM updates bypass React state.
-  useEffect(() => {
-    if (!player.isPlaying) return;
-
-    let raf = 0;
-    let energy = 0;
-    let lastFrame = 0;
-    const TARGET_INTERVAL = 1000 / 24;
-
-    const tick = (now: number) => {
-      raf = requestAnimationFrame(tick);
-      if (now - lastFrame < TARGET_INTERVAL) return;
-      lastFrame = now;
-
-      const analyser = getAnalyserNode();
-      if (!analyser) return;
-
-      const freqData = new Uint8Array(analyser.frequencyBinCount);
-      analyser.getByteFrequencyData(freqData);
-
-      // Sample low bass bins (~60–250 Hz range)
-      const endBin = Math.min(12, freqData.length);
-      let sum = 0;
-      for (let i = 2; i < endBin; i++) sum += freqData[i];
-      const bass = sum / (endBin - 2) / 255;
-
-      // Slow smooth so the background breathes rather than twitches
-      energy += (bass - energy) * 0.08;
-
-      const scale = 1.5 + energy * 0.06;
-      const transform = `scale(${scale})`;
-      for (const img of bgImgRefs.current) {
-        if (img) img.style.transform = transform;
-      }
-    };
-
-    raf = requestAnimationFrame(tick);
-    return () => {
-      cancelAnimationFrame(raf);
-      for (const img of bgImgRefs.current) {
-        if (img) img.style.transform = '';
-      }
-    };
-  }, [player.isPlaying]);
 
   useEffect(() => {
     const art = current?.coverArt;
@@ -730,7 +679,6 @@ export default function NowPlayingView({
         bgState.slots[slot] ? (
           <img
             key={slot}
-            ref={(el) => { bgImgRefs.current[slot] = el; }}
             src={bgState.slots[slot]}
             aria-hidden
             className="now-playing-blur-art absolute inset-0 w-full h-full object-cover scale-150 pointer-events-none select-none"
