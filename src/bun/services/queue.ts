@@ -14,6 +14,7 @@ import type {
 import { getContentSourceIdentity } from '../../shared/content-source';
 import { getTrackAlbumName } from '../../shared/track-metadata';
 import {
+  classifyError,
   downloadTrack,
   findExistingTrack,
   getArtistDir,
@@ -61,6 +62,20 @@ export class DownloadQueue extends EventEmitter {
   private concurrency = 3;
   private pendingTracks: Array<{ downloadId: string; track: TrackInfo; attempt: number }> = [];
   private pausedDownloads = new Set<string>();
+  /** Tracks pending retry timers so they can be cancelled on pause/remove. */
+  private retryTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
+
+  private cancelRetryTimers(downloadId: string, trackId?: string): void {
+    const prefix = trackId ? `${downloadId}::${trackId}` : `${downloadId}::`;
+    const toDelete: string[] = [];
+    for (const [key, timer] of this.retryTimeouts) {
+      if (key.startsWith(prefix)) {
+        clearTimeout(timer);
+        toDelete.push(key);
+      }
+    }
+    for (const key of toDelete) this.retryTimeouts.delete(key);
+  }
 
   private findExistingPlaylistBySource(url: string): DownloadItem | undefined {
     const sourceIdentity = getContentSourceIdentity(url);
@@ -322,6 +337,7 @@ export class DownloadQueue extends EventEmitter {
     if (item.status === 'done' || item.status === 'error' || item.status === 'paused') return;
 
     this.pausedDownloads.add(id);
+    this.cancelRetryTimers(id);
 
     const controller = this.abortControllers.get(id);
     if (controller) {
@@ -372,6 +388,7 @@ export class DownloadQueue extends EventEmitter {
       this.abortControllers.delete(id);
     }
     this.pausedDownloads.delete(id);
+    this.cancelRetryTimers(id);
     this.pendingTracks = this.pendingTracks.filter((p) => p.downloadId !== id);
 
     const item = this.items.get(id);
@@ -392,6 +409,7 @@ export class DownloadQueue extends EventEmitter {
     const track = item.tracks.find((t) => t.id === trackId);
     if (!track) return;
 
+    this.cancelRetryTimers(downloadId, trackId);
     this.pendingTracks = this.pendingTracks.filter(
       (p) => !(p.downloadId === downloadId && p.track.id === trackId)
     );
@@ -418,6 +436,7 @@ export class DownloadQueue extends EventEmitter {
       this.abortControllers.delete(id);
     }
     this.pausedDownloads.delete(id);
+    this.cancelRetryTimers(id);
     this.pendingTracks = this.pendingTracks.filter((p) => p.downloadId !== id);
 
     let queuedTracks = 0;
@@ -435,6 +454,7 @@ export class DownloadQueue extends EventEmitter {
         track.speed = undefined;
         track.eta = undefined;
         track.error = undefined;
+        track.errorCategory = undefined;
         continue;
       }
 
@@ -443,6 +463,7 @@ export class DownloadQueue extends EventEmitter {
       track.speed = undefined;
       track.eta = undefined;
       track.error = undefined;
+      track.errorCategory = undefined;
       track.filePath = undefined;
       track.fileSizeBytes = undefined;
       queuedTracks++;
@@ -481,6 +502,7 @@ export class DownloadQueue extends EventEmitter {
         track.status = 'queued';
         track.progress = 0;
         track.error = undefined;
+        track.errorCategory = undefined;
         this.pendingTracks.push({ downloadId: item.id, track, attempt: 0 });
       }
 
@@ -536,7 +558,10 @@ export class DownloadQueue extends EventEmitter {
         item.completedAt = new Date().toISOString();
       } else if (item.tracks.some((t) => t.status === 'downloading' || t.status === 'converting')) {
         item.status = 'active';
-      } else if (item.status !== 'queued') {
+      } else if (item.tracks.some((t) => t.status === 'queued')) {
+        // Nothing actively downloading yet (initial state or waiting for retry timer)
+        item.status = 'queued';
+      } else {
         item.status = 'active';
       }
     }
@@ -544,6 +569,24 @@ export class DownloadQueue extends EventEmitter {
     if (emit) {
       this.emit('download:updated', { ...item, tracks: item.tracks.map((t) => ({ ...t })) });
     }
+  }
+
+  /** Retry a single failed track without resetting the rest of the download. */
+  retryTrack(downloadId: string, trackId: string): void {
+    const item = this.items.get(downloadId);
+    if (!item) return;
+    const track = item.tracks.find((t) => t.id === trackId);
+    if (!track || track.status !== 'error') return;
+
+    this.cancelRetryTimers(downloadId, trackId);
+    track.status = 'queued';
+    track.progress = 0;
+    track.error = undefined;
+    track.errorCategory = undefined;
+    this.pendingTracks.push({ downloadId, track, attempt: 0 });
+    this.recalculate(item);
+    savePlaylist(item);
+    this.drain();
   }
 
   setConcurrency(n: number): void {
@@ -665,16 +708,34 @@ export class DownloadQueue extends EventEmitter {
           progress: 0,
           error: undefined,
         });
-        // Schedule retry after freeing the slot
-        setTimeout(() => {
-          this.pendingTracks.unshift({ downloadId, track, attempt: attempt + 1 });
+        // Schedule retry after freeing the slot; store timer so it can be cancelled on pause/remove
+        const retryKey = `${downloadId}::${track.id}`;
+        const timeoutId = setTimeout(() => {
+          this.retryTimeouts.delete(retryKey);
+          const currentItem = this.items.get(downloadId);
+          if (!currentItem) {
+            logger.debug(`Retry skipped — download removed: "${track.title}"`);
+            return;
+          }
+          if (this.pausedDownloads.has(downloadId)) {
+            logger.debug(`Retry deferred — download paused: "${track.title}"`);
+            return;
+          }
+          const currentTrack = currentItem.tracks.find((t) => t.id === track.id);
+          if (!currentTrack) {
+            logger.debug(`Retry skipped — track removed: "${track.title}"`);
+            return;
+          }
+          this.pendingTracks.unshift({ downloadId, track: currentTrack, attempt: attempt + 1 });
           this.drain();
         }, delay);
+        this.retryTimeouts.set(retryKey, timeoutId);
       } else {
         logger.error(`Track failed after ${MAX_RETRIES + 1} attempts: "${track.title}"`, msg);
         this.mutateTrack(downloadId, track.id, {
           status: 'error',
           error: msg,
+          errorCategory: classifyError(msg),
         });
       }
     } finally {

@@ -4,6 +4,7 @@ export type AudioFormat = 'mp3' | 'aac' | 'm4a' | 'flac' | 'wav';
 export type QualityPreset = 'auto' | '320' | '256' | '192' | '128' | '96';
 export type TrackStatus = 'queued' | 'downloading' | 'converting' | 'done' | 'error';
 export type DownloadStatus = 'fetching' | 'queued' | 'active' | 'done' | 'error' | 'paused';
+export type TrackErrorCategory = 'network' | 'unavailable' | 'auth' | 'unknown';
 export type ContentType = 'track' | 'album' | 'playlist';
 
 export interface TrackInfo {
@@ -20,6 +21,7 @@ export interface TrackInfo {
   speed?: number;
   eta?: number;
   error?: string;
+  errorCategory?: TrackErrorCategory;
   filePath?: string;
   fileSizeBytes?: number;
 }

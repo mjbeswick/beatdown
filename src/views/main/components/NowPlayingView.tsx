@@ -565,14 +565,16 @@ export default function NowPlayingView({
         </div>
       </div>
 
-      <div
-        className="flex h-full min-h-full w-full flex-col items-center justify-center"
-        style={{
-          gap: 'clamp(1.1rem, 2.6vmin, 2rem)',
-          paddingInline: 'clamp(1rem, 4vmin, 3.25rem)',
-          paddingBlock: 'clamp(1.35rem, 4.8vmin, 3.4rem)',
-        }}
-      >
+      <div className="flex min-h-full w-full flex-col">
+        <div
+          className="flex flex-1 w-full flex-col items-center justify-center"
+          style={{
+            gap: 'clamp(1.1rem, 2.6vmin, 2rem)',
+            paddingInline: 'clamp(1rem, 4vmin, 3.25rem)',
+            paddingTop: 'clamp(1.35rem, 4.8vmin, 3.4rem)',
+            paddingBottom: 0,
+          }}
+        >
         <div
           className="aspect-square rounded-2xl overflow-hidden shadow-2xl shadow-black/60"
           style={{ width: 'clamp(15rem, 46vmin, 34rem)' }}
@@ -664,7 +666,7 @@ export default function NowPlayingView({
             {current.albumName}
           </button>
         </div>
-
+        </div>
         {nowPlayingSpectrumVisible && (
           <SpectrumAnalyzer style={nowPlayingSpectrumStyle} />
         )}

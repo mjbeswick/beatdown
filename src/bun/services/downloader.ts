@@ -50,6 +50,42 @@ export function getExpectedAudioExtension(format: AudioFormat): string {
   return `.${format === 'aac' ? 'm4a' : format}`;
 }
 
+export function classifyError(msg: string): import('../../shared/types').TrackErrorCategory {
+  const lower = msg.toLowerCase();
+  if (
+    lower.includes('unavailable') ||
+    lower.includes('private video') ||
+    lower.includes('not available') ||
+    lower.includes('members only') ||
+    lower.includes('age-restricted') ||
+    lower.includes('has been removed') ||
+    lower.includes('no video formats')
+  ) {
+    return 'unavailable';
+  }
+  if (
+    lower.includes('network') ||
+    lower.includes('timeout') ||
+    lower.includes('timed out') ||
+    lower.includes('connection') ||
+    lower.includes('econnreset') ||
+    lower.includes('socket') ||
+    lower.includes('enotfound')
+  ) {
+    return 'network';
+  }
+  if (
+    lower.includes('login') ||
+    lower.includes('sign in') ||
+    lower.includes('authentication') ||
+    lower.includes('unauthorized') ||
+    lower.includes('403')
+  ) {
+    return 'auth';
+  }
+  return 'unknown';
+}
+
 export function findExistingTrack(artist: string, title: string, format?: AudioFormat): string | null {
   const artistDir = getArtistDir(artist);
   if (!fs.existsSync(artistDir)) return null;

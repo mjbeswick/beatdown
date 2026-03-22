@@ -39,6 +39,7 @@ export interface BeatdownRPCSchema {
       'download:preview': { params: { url: string }; response: SpotifyContent };
       'download:remove': { params: { id: string }; response: void };
       'track:remove': { params: { downloadId: string; trackId: string }; response: void };
+      'track:retry': { params: { downloadId: string; trackId: string }; response: void };
       'download:redownload': { params: { id: string }; response: void };
       'download:pause': { params: { id: string }; response: void };
       'download:resume': { params: { id: string }; response: void };

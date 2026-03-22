@@ -58,6 +58,10 @@ export const removeTrackFx = createEffect(async ({ downloadId, trackId }: { down
   return rpc.proxy.request['track:remove']({ downloadId, trackId });
 });
 
+export const retryTrackFx = createEffect(({ downloadId, trackId }: { downloadId: string; trackId: string }) => {
+  return rpc.proxy.request['track:retry']({ downloadId, trackId });
+});
+
 export const redownloadFx = createEffect((id: string) => {
   return rpc.proxy.request['download:redownload']({ id });
 });

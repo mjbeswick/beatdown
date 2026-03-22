@@ -235,6 +235,10 @@ const rpc = createRPC<BeatdownBunLocalSchema, BeatdownBunRemoteSchema>({
       queue.removeTrack(downloadId, trackId);
     },
 
+    'track:retry': ({ downloadId, trackId }) => {
+      queue.retryTrack(downloadId, trackId);
+    },
+
     'download:redownload': ({ id }) => {
       queue.redownload(id);
     },

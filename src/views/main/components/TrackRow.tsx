@@ -1,9 +1,9 @@
-import { CheckCircle2, AlertCircle, Loader2, Clock, Trash2, Play, ListMusic, Heart } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Loader2, Clock, Trash2, Play, ListMusic, Heart, RotateCcw } from 'lucide-react';
 import type { TrackInfo } from '../../../shared/types';
 import { fmtSpeed, fmtEta } from './DownloadRow';
 import { useContextMenu } from '../hooks/useContextMenu';
 import ContextMenu from './ContextMenu';
-import { removeTrackFx } from '../stores/downloads';
+import { removeTrackFx, retryTrackFx } from '../stores/downloads';
 import {
   playTrack,
   playPlaylist,
@@ -16,13 +16,13 @@ import { useUnit, useStoreMap } from 'effector-react';
 import { navToAlbum, navToArtist } from '../stores/nav';
 import { $favourites, toggleFavourite } from '../stores/favourites';
 
-function TrackIcon({ status }: { status: TrackInfo['status'] }) {
+function TrackIcon({ status, error }: { status: TrackInfo['status']; error?: string }) {
   switch (status) {
     case 'queued':    return <Clock size={11} className="text-zinc-600" />;
     case 'downloading': return <Loader2 size={11} className="text-emerald-400 animate-spin" />;
     case 'converting':  return <Loader2 size={11} className="text-blue-400 animate-spin" />;
     case 'done':      return <CheckCircle2 size={11} className="text-emerald-400" />;
-    case 'error':     return <AlertCircle size={11} className="text-red-400" />;
+    case 'error':     return <span title={error}><AlertCircle size={11} className="text-red-400" /></span>;
   }
 }
 
@@ -122,6 +122,14 @@ export default function TrackRow({
       { label: 'Go to Artist', onClick: () => navToArtist(track.artist) },
       { separator: true as const },
     ] : []),
+    ...(track.status === 'error' && downloadId ? [
+      {
+        label: 'Retry',
+        icon: <RotateCcw size={13} />,
+        onClick: () => retryTrackFx({ downloadId, trackId: track.id }),
+      },
+      { separator: true as const },
+    ] : []),
     {
       label: 'Remove track',
       icon: <Trash2 size={13} />,
@@ -168,9 +176,9 @@ export default function TrackRow({
                 <Play size={10} className="hidden group-hover:block text-zinc-400 fill-zinc-400" />
               </>
             ) : (
-              <TrackIcon status={track.status} />
-            )}
-          </div>
+            <TrackIcon status={track.status} error={track.error} />
+          )}
+        </div>
 
           {/* Title column */}
           <div className="relative z-10 flex-[3] min-w-0">
@@ -281,7 +289,7 @@ export default function TrackRow({
         </span>
       ) : (
         <span className="relative z-10">
-          <TrackIcon status={track.status} />
+          <TrackIcon status={track.status} error={track.error} />
         </span>
       )}
 

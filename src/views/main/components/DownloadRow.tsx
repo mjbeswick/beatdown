@@ -94,6 +94,16 @@ export default function DownloadRow({ item }: Props) {
 
   const progressColor = item.status === 'error' ? 'bg-red-500' : 'bg-emerald-500';
 
+  const failTooltip = (() => {
+    if (item.failedTracks === 0) return undefined;
+    const categories = item.tracks
+      .filter((t) => t.status === 'error' && t.errorCategory)
+      .map((t) => t.errorCategory!);
+    if (categories.length > 0 && categories.every((c) => c === categories[0]))
+      return `${item.failedTracks} failed • ${categories[0]}`;
+    return `${item.failedTracks} track(s) failed`;
+  })();
+
   return (
     <div className="border-b border-zinc-700/40 last:border-b-0">
       <div
@@ -165,7 +175,9 @@ export default function DownloadRow({ item }: Props) {
         <div className="w-20 shrink-0 text-right font-mono text-xs tabular-nums">
           <span className="text-zinc-400">{item.completedTracks}</span>
           <span className="text-zinc-600">/{item.totalTracks}</span>
-          {item.failedTracks > 0 && <span className="text-red-500 ml-1">{item.failedTracks}✗</span>}
+          {item.failedTracks > 0 && (
+            <span className="text-red-500 ml-1" title={failTooltip}>{item.failedTracks}✗</span>
+          )}
         </div>
 
         {/* Controls */}

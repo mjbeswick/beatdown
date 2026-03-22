@@ -23,7 +23,7 @@ function SpectrumAnalyzer({ style }: SpectrumAnalyzerProps) {
           style === 'split'
             ? {
                 mode: 4,
-                barSpace: 0.2,
+                barSpace: 2,
                 gradient: 'prism' as const,
                 mirror: 1 as const,
               }
@@ -36,7 +36,7 @@ function SpectrumAnalyzer({ style }: SpectrumAnalyzerProps) {
                 }
               : {
                   mode: 3,
-                  barSpace: 0,
+                  barSpace: 0.1,
                   gradient: 'rainbow' as const,
                   mirror: 0 as const,
                 };
@@ -53,13 +53,15 @@ function SpectrumAnalyzer({ style }: SpectrumAnalyzerProps) {
           maxFPS: 24,
 
           // Audio analysis
-          fftSize: 2048,
+          fftSize: 8192,
           smoothing: 0.7,
-          minFreq: 60,
+          minFreq: 20,
           maxFreq: 12000,
           minDecibels: -85,
           maxDecibels: -35,
-          weightingFilter: '',
+          frequencyScale: 'log',
+          weightingFilter: 'D',
+          mode: 2, // bars with falloff
 
           // Amplitude
           linearAmplitude: true,
@@ -68,6 +70,7 @@ function SpectrumAnalyzer({ style }: SpectrumAnalyzerProps) {
           // Colors
           colorMode: 'gradient',
           channelLayout: 'single',
+          alphaBars: true,
 
           // Background
           overlay: true,
@@ -82,7 +85,7 @@ function SpectrumAnalyzer({ style }: SpectrumAnalyzerProps) {
 
           // Minimal UI
           showFPS: false,
-          showPeaks: false,
+          showPeaks: true,
           showScaleX: false,
           showScaleY: false,
         });
