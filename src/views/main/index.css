@@ -94,7 +94,7 @@ body {
 
 .now-playing-blur-art {
   filter: var(--now-playing-blur-filter);
-  will-change: opacity;
+  will-change: opacity, transform;
 }
 
 .now-playing-overlay {

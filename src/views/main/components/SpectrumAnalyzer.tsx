@@ -20,26 +20,22 @@ function SpectrumAnalyzer({ style }: SpectrumAnalyzerProps) {
 
       try {
         const styleOptions =
-          style === 'split'
+          style === 'dense'
             ? {
-                mode: 4,
-                barSpace: 2,
-                gradient: 'prism' as const,
-                mirror: 1 as const,
+                mode: 10,
+                barSpace: 0,
+                gradient: 'classic' as const,
+                mirror: 0 as const,
+                fillAlpha: 0.38,
+                lineWidth: 1,
+                showPeaks: false,
               }
-            : style === 'dense'
-              ? {
-                  mode: 10,
-                  barSpace: 0,
-                  gradient: 'steelblue' as const,
-                  mirror: 0 as const,
-                }
-              : {
-                  mode: 3,
-                  barSpace: 0.1,
-                  gradient: 'rainbow' as const,
-                  mirror: 0 as const,
-                };
+            : {
+                mode: 3,
+                barSpace: 0.1,
+                gradient: 'rainbow' as const,
+                mirror: 0 as const,
+              };
 
         const analyzer = new AudioMotionAnalyzer(container, {
           audioCtx,
@@ -61,7 +57,6 @@ function SpectrumAnalyzer({ style }: SpectrumAnalyzerProps) {
           maxDecibels: -35,
           frequencyScale: 'log',
           weightingFilter: 'D',
-          mode: 2, // bars with falloff
 
           // Amplitude
           linearAmplitude: true,
@@ -89,6 +84,16 @@ function SpectrumAnalyzer({ style }: SpectrumAnalyzerProps) {
           showScaleX: false,
           showScaleY: false,
         });
+
+        // Register custom emerald gradient — matches the seek bar color
+        analyzer.registerGradient('emerald', {
+          bgColor: '#000',
+          colorStops: ['#6ee7b7', '#10b981'],
+        });
+
+        if (style !== 'dense') {
+          analyzer.setOptions({ gradient: 'emerald' });
+        }
 
         // Connect AudioMotion to the audio engine's analyser node
         try {

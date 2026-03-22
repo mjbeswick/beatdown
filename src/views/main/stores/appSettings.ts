@@ -4,7 +4,7 @@ import { loadSettingsFx } from './settingsLoader';
 
 export type PlayerSeekerStyle = 'bar' | 'waveform';
 export type DjMode = 'off' | 'gapless' | 'crossfade' | 'beatmatch';
-export type NowPlayingSpectrumStyle = 'classic' | 'split' | 'dense';
+export type NowPlayingSpectrumStyle = 'classic' | 'dense';
 export type NavSection = 'nowplaying' | 'playlists' | 'albums' | 'artists' | 'genres' | 'favourites' | 'visualizer' | 'settings';
 
 export const MIN_WAVEFORM_BAR_WIDTH = 1;
@@ -72,7 +72,7 @@ function sanitizePlayerSeekerStyle(value: unknown): PlayerSeekerStyle {
 }
 
 function sanitizeNowPlayingSpectrumStyle(value: unknown): NowPlayingSpectrumStyle {
-  return value === 'split' || value === 'dense' ? value : DEFAULT_SETTINGS.nowPlayingSpectrumStyle;
+  return value === 'dense' ? value : DEFAULT_SETTINGS.nowPlayingSpectrumStyle;
 }
 
 const VALID_NAV_SECTIONS: NavSection[] = ['nowplaying', 'playlists', 'albums', 'artists', 'genres', 'favourites', 'visualizer', 'settings'];
