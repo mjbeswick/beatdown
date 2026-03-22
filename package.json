@@ -7,9 +7,7 @@
     "build:css": "bun scripts/build-css.ts",
     "dev": "bun run build:css && node node_modules/.bin/electrobun dev",
     "dev:css": "bun scripts/build-css.ts --watch",
-    "build": "bun run build:css && node node_modules/.bin/electrobun build",
-    "start": "node node_modules/.bin/electrobun start",
-    "dev:legacy": "concurrently -n server,client -c cyan,magenta \"npm run dev --workspace=server\" \"npm run dev --workspace=client\""
+    "build": "bun run build:css && node node_modules/.bin/electrobun build --env=stable",   "dev:legacy": "concurrently -n server,client -c cyan,magenta \"npm run dev --workspace=server\" \"npm run dev --workspace=client\""
   },
   "workspaces": [
     "server",

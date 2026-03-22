@@ -10,6 +10,7 @@ const config: ElectrobunConfig = {
   build: {
     mac: {
       icons: 'assets/icon.iconset',
+      createDmg: false,
     },
     win: {
       icon: 'assets/app-icon.png',
