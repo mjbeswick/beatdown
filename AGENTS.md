@@ -1,20 +1,18 @@
-This repository is a Bun and Electrobun desktop app. The main UI lives under src/views/main, with separate client and server workspaces also present in the repo.
+This repository is a macOS desktop app built with Electrobun, Bun, and React. All application code lives under `src/` — the bun (main process) side under `src/bun/`, the renderer under `src/views/main/`, and shared types and RPC schema under `src/shared/`. The `server/` and `client/` directories are a legacy workspace and are not part of the active app.
 
-Before making a non-trivial change, create a short plan that covers the files or areas you expect to touch, the main risk or behavior change, and how you will validate the result.
+Before making a non-trivial change, create a short plan that covers the files or areas you expect to touch, the main risk or behaviour change, and how you will validate the result.
 
 When editing code:
 - Keep changes scoped to the task.
 - Preserve unrelated user changes already in the worktree.
 - Prefer fixing the root cause instead of layering on one-off patches.
-- Update documentation when behavior, setup, or developer commands change.
+- Update documentation when behaviour, setup, or developer commands change.
 
 Validation expectations:
-- Run the smallest relevant checks first, then broader checks if the change affects shared code or packaging.
-- For root, shared, or desktop-shell TypeScript changes, run npx tsc --noEmit -p tsconfig.json.
-- For legacy client workspace changes, run npm run build --workspace=client.
-- For server workspace changes, run npm run build --workspace=server.
-- For packaging, CSS pipeline, or full app integration changes, run npm run build.
-- If runtime behavior changed and local prerequisites are available, verify it with npm run dev.
+- For TypeScript changes, run `bunx tsc --noEmit` to check the whole project.
+- For CSS pipeline changes, run `bun run build:css`.
+- For full app integration or packaging changes, run `bun run build`.
+- If runtime behaviour changed and local prerequisites are available, verify with `bun run dev`.
 - If a command cannot run because a required local dependency is missing, state that explicitly instead of implying validation succeeded.
 
 Testing expectations:
@@ -24,6 +22,6 @@ Testing expectations:
 
 Commit expectations:
 - Do not create a commit unless the user explicitly asks for one.
-- When a commit is requested, use a clear message that describes the behavior change.
+- When a commit is requested, use a clear message that describes the behaviour change.
 
-We are using Electrobun, which is a fork of Electron that uses Bun instead of Node. This means that some Electron APIs may not be available or may behave differently. When making changes, be mindful of the differences between Electron and Electrobun, and test your changes accordingly.
+Electrobun is a framework similar to Electron but uses Bun as the runtime instead of Node. The bun-side process uses Bun APIs directly. The renderer is a WebKit webview. Communication between the two sides uses a typed RPC layer defined in `src/shared/rpc-schema.ts` — add new calls there before implementing them on either side.
