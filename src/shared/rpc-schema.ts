@@ -45,6 +45,7 @@ export interface BeatdownRPCSchema {
       'downloads:getAll': { params: undefined; response: DownloadItem[] };
       'downloads:retryFailed': { params: undefined; response: void };
       'downloads:resumeInterrupted': { params: undefined; response: { count: number } };
+      'download:setCoverArt': { params: { id: string; url: string }; response: DownloadItem | null };
       'stream:getUrl': { params: { filePath: string }; response: string };
       'stream:getPort': { params: undefined; response: number };
       'lyrics:get': { params: { artist: string; title: string }; response: LyricLine[] | null };

@@ -24,13 +24,13 @@ export default function Sidebar() {
       <div className="px-3">
         <button
           onClick={() => navChanged('nowplaying')}
-          className={`w-full flex items-center gap-2 px-2 py-1 text-sm rounded-md transition-colors ${
+          className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 text-sm rounded-md transition-colors ${
             nav === 'nowplaying'
               ? 'bg-zinc-800 text-zinc-100 font-medium'
               : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/70'
           }`}
         >
-          <Headphones size={14} className={`shrink-0 ${isPlaying && nav !== 'nowplaying' ? 'text-emerald-400' : ''}`} />
+          <Headphones size={15} className={`shrink-0 ${isPlaying && nav !== 'nowplaying' ? 'text-emerald-400' : ''}`} />
           <span>Now Playing</span>
           {isPlaying && nav !== 'nowplaying' && (
             <span className="ml-auto flex gap-px items-end h-3">
@@ -47,20 +47,20 @@ export default function Sidebar() {
 
       {/* Library section */}
       <div className="flex-1 px-3 py-3 overflow-y-auto">
-        <p className="px-2 mb-1 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
+        <p className="px-2.5 mb-2 text-[10px] font-semibold uppercase tracking-widest text-zinc-600">
           Library
         </p>
         {LIBRARY_NAV.map(({ key, label, Icon }) => (
           <button
             key={key}
             onClick={() => navChanged(key)}
-            className={`w-full flex items-center gap-2 px-2 py-1 text-sm rounded-md transition-colors ${
+            className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 text-sm rounded-md transition-colors mb-0.5 last:mb-0 ${
               nav === key
-                ? 'bg-zinc-700/70 text-zinc-100 font-medium'
-                : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700/30'
+                ? 'bg-zinc-800 text-zinc-100 font-medium'
+                : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/70'
             }`}
           >
-            <Icon size={14} className="shrink-0" />
+            <Icon size={15} className="shrink-0" />
             <span>{label}</span>
           </button>
         ))}
@@ -70,13 +70,13 @@ export default function Sidebar() {
       <div className="px-3 pt-2">
         <button
           onClick={() => navChanged('settings')}
-          className={`w-full flex items-center gap-2 px-2 py-1 text-sm rounded-md transition-colors ${
+          className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 text-sm rounded-md transition-colors ${
             nav === 'settings'
               ? 'bg-zinc-800 text-zinc-100 font-medium'
               : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/70'
           }`}
         >
-          <Settings size={14} className="shrink-0" />
+          <Settings size={15} className="shrink-0" />
           <span>Settings</span>
         </button>
       </div>

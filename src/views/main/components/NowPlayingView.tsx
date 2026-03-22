@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useUnit } from 'effector-react';
 import {
   Play,
@@ -27,6 +27,7 @@ import { confirmQueueRemoval } from '../lib/destructiveActionConfirm';
 import type { LyricLine } from '../../../shared/types';
 import ContextMenu, { type ContextMenuEntry } from './ContextMenu';
 import ResizablePaneLayout from './ResizablePaneLayout';
+import SpectrumAnalyzer from './SpectrumAnalyzer';
 import { useContextMenu } from '../hooks/useContextMenu';
 
 type Tab = 'queue' | 'lyrics';
@@ -107,11 +108,30 @@ export default function NowPlayingView({
       .finally(() => setLyricsLoading(false));
   }, [current?.track.artist, current?.track.title]);
 
+  const activeLine = useMemo(() => {
+    if (!lyrics) return -1;
+    let idx = -1;
+    for (let i = 0; i < lyrics.length; i++) {
+      if (lyrics[i].time <= player.currentTime) idx = i;
+      else break;
+    }
+    return idx;
+  }, [lyrics, player.currentTime]);
+
+  const visibleQueue = useMemo(() => {
+    const matchesSearch = createFuzzySearchMatcher(search);
+    return player.queue
+      .map((item, queueIdx) => ({ item, queueIdx }))
+      .filter(({ item, queueIdx }) =>
+        queueIdx === player.queueIndex || matchesSearch(item.track.title)
+      );
+  }, [player.queue, player.queueIndex, search]);
+
   useEffect(() => {
     if (tab === 'lyrics' && activeRef.current) {
       activeRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
-  }, [player.currentTime, tab]);
+  }, [activeLine, tab]);
 
   useEffect(() => {
     closeAlbumArtMenu();
@@ -144,27 +164,7 @@ export default function NowPlayingView({
     };
   }, [showConfig]);
 
-  const getActiveLine = (): number => {
-    if (!lyrics) return -1;
-
-    let activeIndex = -1;
-    for (let i = 0; i < lyrics.length; i++) {
-      if (lyrics[i].time <= player.currentTime) activeIndex = i;
-      else break;
-    }
-
-    return activeIndex;
-  };
-
-  const activeLine = getActiveLine();
   const isFav = current ? favourites.includes(current.track.id) : false;
-  const matchesSearch = createFuzzySearchMatcher(search);
-  const visibleQueue = player.queue
-    .map((item, queueIdx) => ({ item, queueIdx }))
-    .filter(({ item, queueIdx }) => {
-      if (queueIdx === player.queueIndex) return true;
-      return matchesSearch(item.track.title);
-    });
 
   useLayoutEffect(() => {
     if (!current || !showSidebar || tab !== 'queue') return;
@@ -519,9 +519,7 @@ export default function NowPlayingView({
         }}
       >
         <div
-          className={`aspect-square rounded-2xl overflow-hidden shadow-2xl transition-all duration-500 ${
-            player.isPlaying ? 'scale-100 shadow-black/60' : 'scale-[0.93] shadow-black/40 opacity-80'
-          }`}
+          className="aspect-square rounded-2xl overflow-hidden shadow-2xl shadow-black/60"
           style={{ width: 'clamp(15rem, 46vmin, 34rem)' }}
           onContextMenu={openAlbumArtMenu}
           title="Right-click for track actions"
@@ -611,6 +609,8 @@ export default function NowPlayingView({
             {current.albumName}
           </button>
         </div>
+
+        <SpectrumAnalyzer />
       </div>
     </div>
   );

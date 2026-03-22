@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useUnit } from 'effector-react';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
@@ -66,22 +66,28 @@ export default function App() {
     }
   }, [lyricsOpen, nav]);
 
+  // Ref so the keyboard handler always sees the latest player values without
+  // re-attaching the listener on every playback tick.
+  const playerRef = useRef({ currentTime: player.currentTime, duration: player.duration, volume: player.volume });
+  playerRef.current = { currentTime: player.currentTime, duration: player.duration, volume: player.volume };
+
   // Global keyboard shortcuts
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement).tagName;
       if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
 
+      const { currentTime, duration, volume } = playerRef.current;
       switch (e.code) {
         case 'Space':
           e.preventDefault();
           togglePlay();
           break;
         case 'ArrowLeft':
-          seek(Math.max(0, player.currentTime - (e.shiftKey ? 30 : 5)));
+          seek(Math.max(0, currentTime - (e.shiftKey ? 30 : 5)));
           break;
         case 'ArrowRight':
-          seek(Math.min(player.duration, player.currentTime + (e.shiftKey ? 30 : 5)));
+          seek(Math.min(duration, currentTime + (e.shiftKey ? 30 : 5)));
           break;
         case 'KeyN':
           next();
@@ -90,13 +96,13 @@ export default function App() {
           prev();
           break;
         case 'KeyM':
-          setVolume(player.volume > 0 ? 0 : 0.8);
+          setVolume(volume > 0 ? 0 : 0.8);
           break;
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [player.currentTime, player.duration, player.volume]);
+  }, []);
 
   const hasPlayer = !!player.current;
   const globalLyricsOpen = nav === 'nowplaying' ? false : lyricsOpen;

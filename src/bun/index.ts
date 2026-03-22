@@ -77,10 +77,12 @@ const streamServer = Bun.serve({
 
     const cleanPath = path.resolve(filePath);
 
-    // Security: ensure the resolved path stays within the configured library dir
+    // Security: ensure the resolved path stays within the library or playlists dir
     const libraryBase = paths.libraryDir;
+    const playlistsBase = paths.playlistsDir;
     logger.debug(`Stream request: ${req.method} ${cleanPath} (base: ${libraryBase})`);
-    if (!cleanPath.startsWith(libraryBase + path.sep)) {
+    const allowed = cleanPath.startsWith(libraryBase + path.sep) || cleanPath.startsWith(playlistsBase + path.sep);
+    if (!allowed) {
       logger.warn(`Stream forbidden: ${cleanPath}`);
       return new Response('Forbidden', { status: 403 });
     }
@@ -92,7 +94,7 @@ const streamServer = Bun.serve({
     }
 
     const fileSize = file.size;
-    const contentType = getAudioMime(cleanPath);
+    const contentType = getMime(cleanPath);
     const range = req.headers.get('range');
     const body = req.method === 'HEAD' ? null : file;
     const baseHeaders = {
@@ -183,7 +185,7 @@ function parseByteRange(rangeHeader: string, fileSize: number): { start: number;
   return { start, end };
 }
 
-function getAudioMime(filePath: string): string {
+function getMime(filePath: string): string {
   const ext = path.extname(filePath).toLowerCase();
   const mime: Record<string, string> = {
     '.mp3': 'audio/mpeg',
@@ -193,8 +195,13 @@ function getAudioMime(filePath: string): string {
     '.wav': 'audio/wav',
     '.opus': 'audio/ogg; codecs=opus',
     '.ogg': 'audio/ogg',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.png': 'image/png',
+    '.webp': 'image/webp',
+    '.gif': 'image/gif',
   };
-  return mime[ext] ?? 'audio/mpeg';
+  return mime[ext] ?? 'application/octet-stream';
 }
 
 const streamPort = (streamServer.port as number);
@@ -241,11 +248,17 @@ const rpc = createRPC<BeatdownBunLocalSchema, BeatdownBunRemoteSchema>({
     },
 
     'downloads:getAll': () => {
-      return queue.getAll();
+      return queue.getAll().map(withStreamCoverArt);
     },
 
     'downloads:retryFailed': () => {
       queue.retryAllFailed();
+    },
+
+    'download:setCoverArt': async ({ id, url }) => {
+      await queue.setCoverArt(id, url);
+      const item = queue.get(id);
+      return item ? withStreamCoverArt(item) : null;
     },
 
     'downloads:resumeInterrupted': () => {
@@ -402,12 +415,19 @@ const rpc = createRPC<BeatdownBunLocalSchema, BeatdownBunRemoteSchema>({
 
 // ── Queue event forwarding ────────────────────────────────────────────────────
 
+function withStreamCoverArt(item: DownloadItem): DownloadItem {
+  if (item.coverArt && !item.coverArt.startsWith('http')) {
+    return { ...item, coverArt: `http://127.0.0.1:${streamPort}/stream?path=${encodeURIComponent(item.coverArt)}` };
+  }
+  return item;
+}
+
 queue.on('download:added', (item: DownloadItem) => {
-  try { rpc.proxy.send['download:added'](item); } catch {}
+  try { rpc.proxy.send['download:added'](withStreamCoverArt(item)); } catch {}
 });
 
 queue.on('download:updated', (item: DownloadItem) => {
-  try { rpc.proxy.send['download:updated'](item); } catch {}
+  try { rpc.proxy.send['download:updated'](withStreamCoverArt(item)); } catch {}
 });
 
 queue.on('download:removed', (id: string) => {

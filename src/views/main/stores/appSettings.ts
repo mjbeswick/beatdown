@@ -4,6 +4,7 @@ import { loadSettingsFx } from './settingsLoader';
 
 export type PlayerSeekerStyle = 'bar' | 'waveform';
 export type DjMode = 'off' | 'gapless' | 'crossfade' | 'beatmatch';
+export type NavSection = 'nowplaying' | 'playlists' | 'albums' | 'artists' | 'genres' | 'favourites' | 'visualizer' | 'settings';
 
 export const MIN_WAVEFORM_BAR_WIDTH = 1;
 export const MAX_WAVEFORM_BAR_WIDTH = 8;
@@ -13,6 +14,7 @@ export const MAX_WAVEFORM_HEIGHT = 32;
 export interface AppSettings {
   confirmDeleteActions: boolean;
   playerSeekerStyle: PlayerSeekerStyle;
+  playerSeekerBeatPulse: boolean;
   waveformHeight: number;
   waveformBarWidth: number;
   waveformBarGap: number;
@@ -21,6 +23,7 @@ export interface AppSettings {
   djMode: DjMode;
   crossfadeDuration: number; // seconds, 2–16
   maxConcurrentDownloads: number; // 1–6
+  selectedView: NavSection;
 }
 
 type PersistedAppSettings = Partial<AppSettings> & {
@@ -30,6 +33,7 @@ type PersistedAppSettings = Partial<AppSettings> & {
 const DEFAULT_SETTINGS: AppSettings = {
   confirmDeleteActions: true,
   playerSeekerStyle: 'bar',
+  playerSeekerBeatPulse: false,
   waveformHeight: 18,
   waveformBarWidth: 2,
   waveformBarGap: 2,
@@ -38,6 +42,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   djMode: 'off',
   crossfadeDuration: 8,
   maxConcurrentDownloads: 3,
+  selectedView: 'playlists' as NavSection,
 };
 
 function clamp(value: number, min: number, max: number): number {
@@ -61,6 +66,11 @@ function sanitizePlayerSeekerStyle(value: unknown): PlayerSeekerStyle {
   return value === 'waveform' ? 'waveform' : DEFAULT_SETTINGS.playerSeekerStyle;
 }
 
+const VALID_NAV_SECTIONS: NavSection[] = ['nowplaying', 'playlists', 'albums', 'artists', 'genres', 'favourites', 'visualizer', 'settings'];
+function sanitizeNavSection(value: unknown): NavSection {
+  return VALID_NAV_SECTIONS.includes(value as NavSection) ? (value as NavSection) : DEFAULT_SETTINGS.selectedView;
+}
+
 function sanitizeSettings(input: PersistedAppSettings | null | undefined): AppSettings {
   const barWidth =
     typeof input?.waveformBarWidth === 'number'
@@ -80,6 +90,10 @@ function sanitizeSettings(input: PersistedAppSettings | null | undefined): AppSe
   return {
     confirmDeleteActions,
     playerSeekerStyle: sanitizePlayerSeekerStyle(input?.playerSeekerStyle),
+    playerSeekerBeatPulse:
+      typeof input?.playerSeekerBeatPulse === 'boolean'
+        ? input.playerSeekerBeatPulse
+        : DEFAULT_SETTINGS.playerSeekerBeatPulse,
     waveformHeight:
       typeof input?.waveformHeight === 'number'
         ? clamp(input.waveformHeight, MIN_WAVEFORM_HEIGHT, MAX_WAVEFORM_HEIGHT)
@@ -106,6 +120,7 @@ function sanitizeSettings(input: PersistedAppSettings | null | undefined): AppSe
       typeof input?.maxConcurrentDownloads === 'number'
         ? clamp(input.maxConcurrentDownloads, 1, 6)
         : DEFAULT_SETTINGS.maxConcurrentDownloads,
+    selectedView: sanitizeNavSection(input?.selectedView),
   };
 }
 

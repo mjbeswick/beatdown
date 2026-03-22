@@ -12,7 +12,7 @@ import {
   $player,
   type PlayingTrack,
 } from '../stores/player';
-import { useUnit } from 'effector-react';
+import { useUnit, useStoreMap } from 'effector-react';
 import { navToAlbum, navToArtist } from '../stores/nav';
 import { $favourites, toggleFavourite } from '../stores/favourites';
 
@@ -72,10 +72,16 @@ export default function TrackRow({
   const useBackgroundProgress = isActive && progressStyle === 'background';
   const displayProgress = isConverting ? 100 : track.progress;
   const progressLabel = isConverting ? 'Finalizing' : `${track.progress}%`;
+  const formattedDuration = formatTrackDuration(track.durationSeconds);
+  const showDuration = !isActive && !!formattedDuration;
   const { pos, open, close } = useContextMenu();
-  const player = useUnit($player);
+  const isNowPlaying = useStoreMap({
+    store: $player,
+    keys: [track.id],
+    fn: (p, [id]) => p.current?.track.id === id,
+  });
+  const isPlaying = useStoreMap({ store: $player, keys: [], fn: (p) => p.isPlaying });
   const favourites = useUnit($favourites);
-  const isNowPlaying = player.current?.track.id === track.id;
   const isFavourited = favourites.includes(track.id);
 
   const asPlayingTrack = (): PlayingTrack => ({
@@ -153,7 +159,7 @@ export default function TrackRow({
           {/* Index / play / equalizer column */}
           <div className="relative z-10 w-8 shrink-0 flex items-center justify-center">
             {isNowPlaying ? (
-              <Equalizer playing={player.isPlaying} />
+              <Equalizer playing={isPlaying} />
             ) : isDone ? (
               <>
                 <span className="group-hover:hidden text-zinc-600 text-[10px] tabular-nums font-mono select-none leading-none">
@@ -209,22 +215,31 @@ export default function TrackRow({
           )}
 
           {/* Trailing: progress label (background mode) or heart (done) */}
-          <div className="relative z-10 w-16 shrink-0 flex items-center justify-end">
+          <div className="relative z-10 w-24 shrink-0 flex items-center justify-end gap-3">
             {useBackgroundProgress ? (
               <span className={isConverting
                 ? 'text-[10px] font-medium uppercase tracking-[0.08em] text-blue-400'
                 : 'text-xs text-zinc-500 font-mono tabular-nums'}>
                 {progressLabel}
               </span>
-            ) : isDone ? (
-              <button
-                className={`shrink-0 transition-opacity ${isFavourited ? 'opacity-100' : 'opacity-0 group-hover:opacity-40 hover:!opacity-100'}`}
-                onClick={(e) => { e.stopPropagation(); toggleFavourite(track.id); }}
-                onDoubleClick={(e) => e.stopPropagation()}
-              >
-                <Heart size={11} className={isFavourited ? 'fill-rose-500 text-rose-500' : 'text-zinc-400'} />
-              </button>
-            ) : null}
+            ) : (
+              <>
+                {showDuration && (
+                  <span className={`text-xs font-mono tabular-nums ${isNowPlaying ? 'text-emerald-300' : isPendingDownload ? 'text-zinc-600' : 'text-zinc-500'}`}>
+                    {formattedDuration}
+                  </span>
+                )}
+                {isDone ? (
+                  <button
+                    className={`shrink-0 transition-opacity ${isFavourited ? 'opacity-100' : 'opacity-0 group-hover:opacity-40 hover:!opacity-100'}`}
+                    onClick={(e) => { e.stopPropagation(); toggleFavourite(track.id); }}
+                    onDoubleClick={(e) => e.stopPropagation()}
+                  >
+                    <Heart size={11} className={isFavourited ? 'fill-rose-500 text-rose-500' : 'text-zinc-400'} />
+                  </button>
+                ) : null}
+              </>
+            )}
           </div>
         </div>
 
@@ -236,7 +251,7 @@ export default function TrackRow({
   }
 
   // ── Standard mode (used in AlbumsView, FavouritesView, DownloadRow) ──────────
-  const trailingSlotWidth = progressStyle === 'background' ? 'w-20' : 'w-5';
+  const trailingSlotWidth = useBackgroundProgress ? 'w-20' : showDuration || isDone ? 'w-24' : 'w-5';
 
   return (
     <div
@@ -258,7 +273,7 @@ export default function TrackRow({
       {/* Now-playing indicator */}
       {isNowPlaying ? (
         <span className="relative z-10 w-[11px] h-[11px] flex items-center justify-center">
-          <Equalizer playing={player.isPlaying} />
+          <Equalizer playing={isPlaying} />
         </span>
       ) : isDone ? (
         <span className="relative z-10 w-[11px] h-[11px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
@@ -322,14 +337,23 @@ export default function TrackRow({
             : 'text-right text-xs text-zinc-500 font-mono tabular-nums'}>
             {progressLabel}
           </span>
-        ) : isDone && (
-          <button
-            className={`shrink-0 transition-opacity ${isFavourited ? 'opacity-100' : 'opacity-0 group-hover:opacity-40 hover:!opacity-100'}`}
-            onClick={(e) => { e.stopPropagation(); toggleFavourite(track.id); }}
-            onDoubleClick={(e) => e.stopPropagation()}
-          >
-            <Heart size={11} className={isFavourited ? 'fill-rose-500 text-rose-500' : 'text-zinc-400'} />
-          </button>
+        ) : (
+          <div className="flex items-center justify-end gap-3">
+            {showDuration && (
+              <span className={`text-right text-xs font-mono tabular-nums ${isNowPlaying ? 'text-emerald-300' : isPendingDownload ? 'text-zinc-600' : 'text-zinc-500'}`}>
+                {formattedDuration}
+              </span>
+            )}
+            {isDone ? (
+              <button
+                className={`shrink-0 transition-opacity ${isFavourited ? 'opacity-100' : 'opacity-0 group-hover:opacity-40 hover:!opacity-100'}`}
+                onClick={(e) => { e.stopPropagation(); toggleFavourite(track.id); }}
+                onDoubleClick={(e) => e.stopPropagation()}
+              >
+                <Heart size={11} className={isFavourited ? 'fill-rose-500 text-rose-500' : 'text-zinc-400'} />
+              </button>
+            ) : null}
+          </div>
         )}
       </div>
 
@@ -338,4 +362,19 @@ export default function TrackRow({
       )}
     </div>
   );
+}
+
+function formatTrackDuration(seconds?: number): string {
+  if (typeof seconds !== 'number' || !Number.isFinite(seconds) || seconds <= 0) return '';
+
+  const totalSeconds = Math.floor(seconds);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const remainder = totalSeconds % 60;
+
+  if (hours > 0) {
+    return `${hours}:${minutes.toString().padStart(2, '0')}:${remainder.toString().padStart(2, '0')}`;
+  }
+
+  return `${minutes}:${remainder.toString().padStart(2, '0')}`;
 }

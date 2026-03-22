@@ -59,6 +59,21 @@ export default function WaveformSettingsCard({
         </div>
       </div>
 
+      {!showWaveformOptions && (
+        <div className="flex items-center justify-between gap-4 px-4 py-2.5 border-t border-zinc-700/40">
+          <div className="min-w-0">
+            <p className="text-zinc-300 text-sm">Pulse seeker dot with audio</p>
+            <p className="mt-0.5 text-zinc-500 text-xs">Locks to detected beat timing when available, with live audio fallback while timing data loads.</p>
+          </div>
+          <input
+            type="checkbox"
+            checked={appSettings.playerSeekerBeatPulse}
+            onChange={(e) => patchAppSettings({ playerSeekerBeatPulse: e.target.checked })}
+            className="h-4 w-4 shrink-0 accent-emerald-500 cursor-pointer"
+          />
+        </div>
+      )}
+
       {showWaveformOptions && (
         <>
           <div className="px-4 pt-3 pb-1 border-t border-zinc-700/40">

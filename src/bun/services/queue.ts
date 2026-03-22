@@ -22,7 +22,7 @@ import {
   type DownloadProgress,
 } from './downloader';
 import { logger } from '../logger';
-import { savePlaylist, deletePlaylist, loadAllPlaylists, calculateSizeOnDiskBytes } from './playlist';
+import { savePlaylist, deletePlaylist, loadAllPlaylists, calculateSizeOnDiskBytes, downloadPlaylistCoverArt } from './playlist';
 import { paths } from './paths';
 
 const MAX_RETRIES = 2;
@@ -188,6 +188,15 @@ export class DownloadQueue extends EventEmitter {
     return this.items.get(id);
   }
 
+  async setCoverArt(id: string, url: string): Promise<void> {
+    const item = this.items.get(id);
+    if (!item) return;
+    item.coverArt = url;
+    await downloadPlaylistCoverArt(item);
+    savePlaylist(item);
+    this.emit('download:updated', { ...item, tracks: item.tracks.map((t) => ({ ...t })) });
+  }
+
   loadFromDisk(): void {
     try {
       const loaded = loadAllPlaylists();
@@ -253,6 +262,7 @@ export class DownloadQueue extends EventEmitter {
       title: t.title,
       artist: t.artist,
       album: getTrackAlbumName(t, content.type === 'album' ? content.name : '') || undefined,
+      durationSeconds: t.durationSeconds,
       genres: t.genres,
       sourceUrl: t.sourceUrl,
       status: 'queued' as TrackStatus,
@@ -292,6 +302,7 @@ export class DownloadQueue extends EventEmitter {
     }
 
     this.recalculate(item, false);
+    await downloadPlaylistCoverArt(item);
     this.emit('download:added', { ...item, tracks: tracks.map((t) => ({ ...t })) });
     savePlaylist(item);
     logger.info(`Added "${content.name}" (${tracks.length} tracks) [${format}/${quality}]`);

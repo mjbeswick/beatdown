@@ -151,14 +151,14 @@ input[type="range"]::-webkit-slider-thumb {
   background: linear-gradient(to right, #10b981 var(--progress, 0%), #3f3f46 var(--progress, 0%));
 }
 .volume-slider::-webkit-slider-runnable-track {
-  background: linear-gradient(to right, #10b981 var(--progress, 0%), #3f3f46 var(--progress, 0%));
+  background: transparent;
 }
 .light-theme input[type="range"]::-webkit-slider-runnable-track {
   background: #d4d4d8;
 }
 .light-theme .seeker::-webkit-slider-runnable-track,
 .light-theme .volume-slider::-webkit-slider-runnable-track {
-  background: linear-gradient(to right, #10b981 var(--progress, 0%), #d4d4d8 var(--progress, 0%));
+  background: transparent;
 }
 
 /* Select element */

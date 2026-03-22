@@ -13,6 +13,36 @@ function normalizeArtistName(value: string): string {
   return value.replace(/\s+-\s+Topic$/, '').trim();
 }
 
+function normalizeDurationSeconds(value: number): number | undefined {
+  if (!Number.isFinite(value) || value <= 0) return undefined;
+  return Math.max(1, Math.round(value));
+}
+
+function parseDurationSeconds(value: unknown): number | undefined {
+  if (typeof value === 'number') return normalizeDurationSeconds(value);
+  if (typeof value !== 'string') return undefined;
+
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+
+  if (/^\d+$/.test(trimmed)) {
+    return normalizeDurationSeconds(Number.parseInt(trimmed, 10));
+  }
+
+  const parts = trimmed.split(':').map((part) => Number.parseInt(part, 10));
+  if (parts.some((part) => Number.isNaN(part))) return undefined;
+
+  if (parts.length === 2) {
+    return normalizeDurationSeconds(parts[0] * 60 + parts[1]);
+  }
+
+  if (parts.length === 3) {
+    return normalizeDurationSeconds(parts[0] * 3600 + parts[1] * 60 + parts[2]);
+  }
+
+  return undefined;
+}
+
 function extractYouTubeVideoUrl(entry: Record<string, unknown>): string | undefined {
   const id = getString(entry['id']);
   if (id) return `https://www.youtube.com/watch?v=${encodeURIComponent(id)}`;
@@ -125,6 +155,10 @@ function parseYouTubeTrack(entry: unknown): SpotifyTrack | null {
     title,
     artist,
     album: getString(record['album']),
+    durationSeconds:
+      parseDurationSeconds(record['duration']) ??
+      parseDurationSeconds(record['duration_string']) ??
+      parseDurationSeconds(record['length_seconds']),
     sourceUrl: extractYouTubeVideoUrl(record),
   };
 }

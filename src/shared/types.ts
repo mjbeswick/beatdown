@@ -12,6 +12,7 @@ export interface TrackInfo {
   title: string;
   artist: string;
   album?: string;
+  durationSeconds?: number;
   genres?: string[];
   sourceUrl?: string;
   status: TrackStatus;
@@ -50,6 +51,7 @@ export interface SpotifyTrack {
   title: string;
   artist: string;
   album?: string;
+  durationSeconds?: number;
   genres?: string[];
   sourceUrl?: string;
 }

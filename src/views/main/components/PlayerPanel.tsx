@@ -25,6 +25,7 @@ import {
   setVolume,
   toggleShuffle,
   toggleRepeat,
+  getStreamUrl,
 } from '../stores/player';
 import { $cast, devicesDiscovered, discoveringStarted, deviceSelected } from '../stores/cast';
 import { navToAlbum, navToArtist } from '../stores/nav';
@@ -32,8 +33,8 @@ import { $favourites, toggleFavourite } from '../stores/favourites';
 import { $appSettings } from '../stores/appSettings';
 import { rpc } from '../rpc';
 import WaveformSeeker from './WaveformSeeker';
-// Ensure audio engine is initialized
-import '../audio/engine';
+import { getActiveDeck, getAnalyserNode } from '../audio/engine';
+import { detectBpm, getCachedBpm, type DetectedBeat } from '../audio/bpmDetector';
 
 // Height of the controls row content (buttons + time display), excluding padding
 const CONTROLS_ROW_HEIGHT = 52;
@@ -43,10 +44,39 @@ const CONTROLS_ROW_PADDING = 12;
 const REGULAR_SEEKER_HEIGHT = 3;
 const WAVEFORM_SEEKER_TOP_PADDING = 12;
 const WAVEFORM_SEEKER_SIDE_PADDING = 16;
+const VOLUME_SLIDER_WIDTH = 84;
+const VOLUME_SLIDER_THUMB_SIZE = 12;
+// Half the thumb dot diameter (h-3.5 = 14px) — used to centre translateX on the bar
+const THUMB_HALF_PX = 7;
+const THUMB_PULSE_MIN_SCALE = 0.88;
+const THUMB_PULSE_MAX_BOOST = 0.56;
+const THUMB_PULSE_DECAY_RATIO = 0.42;
+const THUMB_PULSE_MIN_DECAY_SECS = 0.12;
+const THUMB_PULSE_MAX_DECAY_SECS = 0.24;
 
 interface Props {
   onLyricsToggle: () => void;
   lyricsOpen: boolean;
+}
+
+function getBeatPulseStrength(currentTime: number, beat: DetectedBeat | null): number {
+  if (!beat || !Number.isFinite(currentTime) || !Number.isFinite(beat.bpm) || beat.bpm <= 0) {
+    return 0;
+  }
+
+  const beatPeriod = 60 / beat.bpm;
+  if (!Number.isFinite(beatPeriod) || beatPeriod <= 0) return 0;
+
+  const phase = currentTime - beat.firstBeatOffset;
+  if (phase < 0) return 0;
+
+  const beatAge = ((phase % beatPeriod) + beatPeriod) % beatPeriod;
+  const decaySecs = Math.min(
+    THUMB_PULSE_MAX_DECAY_SECS,
+    Math.max(THUMB_PULSE_MIN_DECAY_SECS, beatPeriod * THUMB_PULSE_DECAY_RATIO),
+  );
+
+  return Math.exp(-beatAge / decaySecs);
 }
 
 export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
@@ -54,9 +84,91 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
   const cast = useUnit($cast);
   const favourites = useUnit($favourites);
   const appSettings = useUnit($appSettings);
+  const isWaveformSeeker = appSettings.playerSeekerStyle === 'waveform';
   const [castOpen, setCastOpen] = useState(false);
   const castRef = useRef<HTMLDivElement>(null);
-  const [seekerHover, setSeekerHover] = useState<{ x: number; time: number } | null>(null);
+  const seekerTooltipRef = useRef<HTMLDivElement>(null);
+  const [isScrubbing, setIsScrubbing] = useState(false);
+  const isScrubbingRef = useRef(false);
+  const scrubRectRef = useRef<DOMRect | null>(null);
+
+  const applyScrubPosition = (progress: number, time: number) => {
+    if (fillRef.current) fillRef.current.style.transform = `scaleX(${progress})`;
+    if (thumbRef.current) thumbRef.current.style.transform = `translate3d(${progress * seekerWidthRef.current - THUMB_HALF_PX}px, -50%, 0)`;
+    if (timeElapsedRef.current) timeElapsedRef.current.textContent = formatTime(time);
+    if (rangeRef.current) rangeRef.current.value = String(time);
+  };
+
+  // DOM refs for animation — bypasses React re-renders for smooth 60fps updates.
+  // fill and thumb are driven by the position RAF loop;
+  // thumbDot is driven by the pulse RAF loop (bar fill is never touched by pulse).
+  const seekerContainerRef = useRef<HTMLDivElement>(null);
+  const seekerWidthRef = useRef(0);
+  const fillRef = useRef<HTMLDivElement>(null);
+  const thumbRef = useRef<HTMLDivElement>(null);
+  const thumbDotRef = useRef<HTMLDivElement>(null);
+  const timeElapsedRef = useRef<HTMLSpanElement>(null);
+
+  // Cache the seeker container width so the RAF loop never reads clientWidth
+  // (a read after a style write forces a layout reflow every frame).
+  useEffect(() => {
+    const el = seekerContainerRef.current;
+    if (!el) return;
+    seekerWidthRef.current = el.clientWidth;
+    const ro = new ResizeObserver(([entry]) => {
+      seekerWidthRef.current = entry.contentRect.width;
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const playerDurationRef = useRef(player.duration);
+  playerDurationRef.current = player.duration;
+  const prevTrackIdRef = useRef<string | null | undefined>(player.current?.track.id);
+  const rangeRef = useRef<HTMLInputElement>(null);
+
+  const [beatTiming, setBeatTiming] = useState<DetectedBeat | null>(null);
+
+  useEffect(() => {
+    if (isWaveformSeeker || !appSettings.playerSeekerBeatPulse) {
+      setBeatTiming(null);
+      return;
+    }
+
+    const track = player.current?.track;
+    if (!track?.id || !track.filePath || !player.streamPort) {
+      setBeatTiming(null);
+      return;
+    }
+
+    const cachedBeat = getCachedBpm(track.id);
+    setBeatTiming(cachedBeat);
+    if (cachedBeat) return;
+
+    let cancelled = false;
+
+    detectBpm(track.id, getStreamUrl(track.filePath, player.streamPort))
+      .then((detectedBeat) => {
+        if (!cancelled) {
+          setBeatTiming(detectedBeat);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setBeatTiming(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    appSettings.playerSeekerBeatPulse,
+    isWaveformSeeker,
+    player.current?.track.id,
+    player.current?.track.filePath,
+    player.streamPort,
+  ]);
 
   // Close the cast popover when clicking outside
   useEffect(() => {
@@ -69,6 +181,126 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [castOpen]);
+
+  // ── Seeker position ───────────────────────────────────────────────────────
+  // During playback a CSS linear transition bridges the ~250 ms gaps between
+  // timeupdate ticks, giving smooth visual movement with no RAF overhead.
+  // Transition is suppressed on track change and while scrubbing so those
+  // updates are always instant.
+  useEffect(() => {
+    if (isWaveformSeeker) return;
+
+    const fill = fillRef.current;
+    const thumb = thumbRef.current;
+    if (!fill || !thumb) return;
+
+    const trackChanged = player.current?.track.id !== prevTrackIdRef.current;
+    prevTrackIdRef.current = player.current?.track.id;
+
+    // While scrubbing, onChange owns all DOM updates — bail out here so
+    // timeupdate ticks don't overwrite the dragged position with a stale value.
+    if (isScrubbing) return;
+
+    const progress = player.duration > 0
+      ? Math.max(0, Math.min(player.currentTime / player.duration, 1))
+      : 0;
+
+    fill.style.transition = trackChanged ? 'none' : 'transform 0.25s linear';
+    thumb.style.transition = trackChanged ? 'none' : 'transform 0.25s linear';
+    fill.style.transform = `scaleX(${progress})`;
+    thumb.style.transform = `translate3d(${progress * seekerWidthRef.current - THUMB_HALF_PX}px, -50%, 0)`;
+    if (thumb.style.visibility === 'hidden') thumb.style.visibility = 'visible';
+    if (timeElapsedRef.current) timeElapsedRef.current.textContent = formatTime(player.currentTime);
+    if (rangeRef.current) rangeRef.current.value = String(player.currentTime);
+  }, [isWaveformSeeker, isScrubbing, player.currentTime, player.duration, player.current?.track.id]);
+
+  // ── Pulse loop ───────────────────────────────────────────────────────────
+  // Drives only the thumb dot (scale + glow). The bar fill is never affected.
+  useEffect(() => {
+    const resetDot = () => {
+      if (thumbDotRef.current) {
+        thumbDotRef.current.style.transform = 'scale(1)';
+        thumbDotRef.current.style.boxShadow = '';
+      }
+    };
+
+    if (isWaveformSeeker || !appSettings.playerSeekerBeatPulse || isScrubbing || !player.isPlaying) {
+      resetDot();
+      return;
+    }
+
+    const analyser = beatTiming ? null : getAnalyserNode();
+    if (!beatTiming && !analyser) { resetDot(); return; }
+
+    const frequencyData = analyser ? new Uint8Array(analyser.frequencyBinCount) : null;
+    let raf = 0;
+    let smoothedScale = 1;
+    let fastBass = 0;
+    let slowBass = 0;
+    let pulseEnv = 0;
+    let priorTransient = 0;
+    let lastPulseAt = 0;
+
+    const tick = () => {
+      const deck = getActiveDeck();
+      const deckTime = deck.currentTime;
+      const currentTime = Number.isFinite(deckTime) ? deckTime : player.currentTime;
+
+      if (beatTiming) {
+        const pulseStrength = getBeatPulseStrength(currentTime, beatTiming);
+        smoothedScale = THUMB_PULSE_MIN_SCALE + Math.min(pulseStrength, 1) * THUMB_PULSE_MAX_BOOST;
+      } else if (analyser && frequencyData) {
+        analyser.getByteFrequencyData(frequencyData);
+
+        const sampleBins = Math.max(12, Math.min(48, Math.floor(frequencyData.length * 0.14)));
+        let weightedEnergy = 0;
+        let totalWeight = 0;
+        let peakEnergy = 0;
+        for (let i = 0; i < sampleBins; i++) {
+          const norm = frequencyData[i] / 255;
+          const w = 1 - (i / sampleBins) * 0.7;
+          weightedEnergy += norm * w;
+          totalWeight += w;
+          if (norm > peakEnergy) peakEnergy = norm;
+        }
+
+        const avg = totalWeight > 0 ? weightedEnergy / totalWeight : 0;
+        const bassEnergy = avg * 0.65 + peakEnergy * 0.35;
+        fastBass += (bassEnergy - fastBass) * 0.52;
+        slowBass += (bassEnergy - slowBass) * 0.05;
+
+        const transient = Math.max(0, fastBass - slowBass * 0.98);
+        const normEnergy = Math.max(0, Math.min(1, (transient - 0.012) / 0.11));
+        const now = performance.now();
+        if (normEnergy > 0.16 && normEnergy > priorTransient * 1.08 && now - lastPulseAt > 60) {
+          pulseEnv = Math.max(pulseEnv, 0.48 + normEnergy * 0.9);
+          lastPulseAt = now;
+        }
+
+        priorTransient += (normEnergy - priorTransient) * 0.28;
+        pulseEnv = Math.max(0, pulseEnv * 0.8 - 0.02);
+
+        // Fast attack with a lower resting scale gives a more obvious beat-driven
+        // shrink/expand cycle without touching the bar fill.
+        const target = THUMB_PULSE_MIN_SCALE + Math.min(pulseEnv, 1) * THUMB_PULSE_MAX_BOOST;
+        smoothedScale += (target - smoothedScale) * (target > smoothedScale ? 0.72 : 0.24);
+      }
+
+      if (thumbDotRef.current) {
+        const strength = Math.max(0, smoothedScale - 1) / (THUMB_PULSE_MIN_SCALE + THUMB_PULSE_MAX_BOOST - 1);
+        thumbDotRef.current.style.transform = `scale(${smoothedScale})`;
+        thumbDotRef.current.style.boxShadow = `0 0 ${3 + strength * 16}px rgba(52, 211, 153, ${0.1 + strength * 0.48})`;
+      }
+
+      raf = requestAnimationFrame(tick);
+    };
+
+    raf = requestAnimationFrame(tick);
+    return () => {
+      cancelAnimationFrame(raf);
+      resetDot();
+    };
+  }, [appSettings.playerSeekerBeatPulse, beatTiming, isScrubbing, isWaveformSeeker, player.isPlaying]);
 
   const handleCastClick = async () => {
     if (cast.isCasting) {
@@ -110,10 +342,19 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
 
   if (!player.current) return null;
 
-  const elapsed = formatTime(player.currentTime);
   const total = formatTime(player.duration);
-  const progressPct = player.duration > 0 ? (player.currentTime / player.duration) * 100 : 0;
-  const isWaveformSeeker = appSettings.playerSeekerStyle === 'waveform';
+  // Initial fill position for first render (RAF takes over immediately after mount).
+  const initialProgress = player.duration > 0 ? Math.max(0, Math.min(player.currentTime / player.duration, 1)) : 0;
+  const normalizedVolume = Math.max(0, Math.min(player.volume, 1));
+  const volumeProgressPct = normalizedVolume * 100;
+  const volumeTrackProgressPct = Math.max(
+    0,
+    Math.min(
+      100,
+      ((VOLUME_SLIDER_THUMB_SIZE / 2 + normalizedVolume * (VOLUME_SLIDER_WIDTH - VOLUME_SLIDER_THUMB_SIZE)) /
+        VOLUME_SLIDER_WIDTH) * 100,
+    ),
+  );
 
   const seekerRowHeight = isWaveformSeeker
     ? appSettings.waveformHeight + WAVEFORM_SEEKER_TOP_PADDING
@@ -128,24 +369,64 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
     >
       {/* ── Full-width seeker ──────────────────────────────────────────────── */}
       <div
+        ref={seekerContainerRef}
         className="relative w-full shrink-0 overflow-visible z-10"
-        style={{ height: seekerRowHeight }}
-        onMouseMove={(e) => {
+        style={{ height: seekerRowHeight, cursor: isWaveformSeeker ? undefined : 'pointer' }}
+        onPointerDown={(e) => {
           if (isWaveformSeeker) return;
-          const rect = e.currentTarget.getBoundingClientRect();
-          const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-          setSeekerHover({ x: e.clientX - rect.left, time: pct * (player.duration || 0) });
+          e.currentTarget.setPointerCapture(e.pointerId);
+          scrubRectRef.current = e.currentTarget.getBoundingClientRect();
+          const progress = Math.max(0, Math.min((e.clientX - scrubRectRef.current.left) / scrubRectRef.current.width, 1));
+          const time = progress * (playerDurationRef.current || 0);
+          if (fillRef.current) fillRef.current.style.transition = 'none';
+          if (thumbRef.current) thumbRef.current.style.transition = 'none';
+          applyScrubPosition(progress, time);
+          isScrubbingRef.current = true;
+          setIsScrubbing(true);
+          seek(time);
         }}
-        onMouseLeave={() => setSeekerHover(null)}
+        onPointerMove={(e) => {
+          if (isWaveformSeeker) return;
+          if (isScrubbingRef.current && scrubRectRef.current) {
+            const progress = Math.max(0, Math.min((e.clientX - scrubRectRef.current.left) / scrubRectRef.current.width, 1));
+            const time = progress * (playerDurationRef.current || 0);
+            applyScrubPosition(progress, time);
+            seek(time);
+          } else {
+            // Tooltip
+            const rect = scrubRectRef.current ?? e.currentTarget.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const t = seekerTooltipRef.current;
+            if (t) {
+              t.style.left = `${x}px`;
+              t.textContent = formatTime(Math.max(0, Math.min(1, x / rect.width)) * (playerDurationRef.current || 0));
+              t.style.display = 'block';
+            }
+          }
+        }}
+        onPointerUp={(e) => {
+          if (isWaveformSeeker || !isScrubbingRef.current) return;
+          const rect = scrubRectRef.current ?? e.currentTarget.getBoundingClientRect();
+          const progress = Math.max(0, Math.min((e.clientX - rect.left) / rect.width, 1));
+          seek(progress * (playerDurationRef.current || 0));
+          scrubRectRef.current = null;
+          isScrubbingRef.current = false;
+          setIsScrubbing(false);
+        }}
+        onPointerCancel={() => {
+          scrubRectRef.current = null;
+          isScrubbingRef.current = false;
+          setIsScrubbing(false);
+        }}
+        onMouseLeave={() => {
+          if (seekerTooltipRef.current) seekerTooltipRef.current.style.display = 'none';
+        }}
       >
-        {seekerHover !== null && (
-          <div
-            className="absolute bottom-full mb-1.5 -translate-x-1/2 bg-zinc-800 border border-zinc-700/80 text-zinc-200 text-[10px] font-mono px-1.5 py-0.5 rounded shadow-lg pointer-events-none z-50 whitespace-nowrap"
-            style={{ left: seekerHover.x }}
-          >
-            {formatTime(seekerHover.time)}
-          </div>
-        )}
+        <div
+          ref={seekerTooltipRef}
+          className="absolute bottom-full mb-1.5 -translate-x-1/2 bg-zinc-800 border border-zinc-700/80 text-zinc-200 text-[10px] font-mono px-1.5 py-0.5 rounded shadow-lg pointer-events-none z-50 whitespace-nowrap"
+          style={{ display: 'none' }}
+        />
 
         {isWaveformSeeker ? (
           <div
@@ -161,26 +442,41 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
           <>
             {/* Track background */}
             <div className="absolute inset-0 bg-zinc-700/50 pointer-events-none" />
-            {/* Progress fill */}
+            {/* Progress fill — CSS transition during playback, instant during scrub */}
             <div
-              className="absolute inset-y-0 left-0 bg-emerald-500 pointer-events-none"
-              style={{ width: `${progressPct}%` }}
+              ref={fillRef}
+              className="absolute inset-0 origin-left bg-emerald-500 pointer-events-none will-change-transform"
+              style={{ transform: `scaleX(${initialProgress})` }}
             />
-            {/* Thumb — perfectly aligned since it uses the same progressPct */}
+            {/* Thumb — CSS transition during playback; pulse RAF drives dot scale/glow */}
             <div
-              className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-emerald-400 shadow-sm pointer-events-none"
-              style={{ left: `${progressPct}%` }}
-            />
-            {/* Transparent range input — covers the thumb area for native drag */}
+              ref={thumbRef}
+              className="absolute left-0 top-1/2 pointer-events-none will-change-transform"
+              style={{ transform: `translate3d(-${THUMB_HALF_PX}px, -50%, 0)`, visibility: 'hidden' }}
+            >
+              <div
+                ref={thumbDotRef}
+                className="h-3.5 w-3.5 rounded-full bg-emerald-400 shadow-sm will-change-transform"
+              />
+            </div>
+            {/* Hidden range input — keyboard accessibility only */}
             <input
+              ref={rangeRef}
               type="range"
               min={0}
               max={player.duration || 0}
-              step={0.1}
-              value={player.currentTime}
-              onChange={(e) => seek(parseFloat(e.target.value))}
-              className="absolute left-0 right-0 opacity-0 cursor-pointer appearance-none"
-              style={{ top: -5, height: 13, margin: 0 }}
+              step={1}
+              defaultValue={player.currentTime}
+              onChange={(e) => {
+                const time = parseFloat(e.target.value);
+                const progress = playerDurationRef.current > 0 ? Math.max(0, Math.min(time / playerDurationRef.current, 1)) : 0;
+                applyScrubPosition(progress, time);
+                seek(time);
+              }}
+              onFocus={() => setIsScrubbing(true)}
+              onBlur={() => setIsScrubbing(false)}
+              className="absolute inset-0 opacity-0 appearance-none"
+              style={{ pointerEvents: 'none' }}
             />
           </>
         )}
@@ -293,7 +589,7 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
 
           {/* Time display */}
           <div className="flex items-center gap-1 text-[10px] tabular-nums font-mono select-none">
-            <span className="text-zinc-400">{elapsed}</span>
+            <span ref={timeElapsedRef} className="text-zinc-400">{formatTime(player.currentTime)}</span>
             <span className="text-zinc-700">·</span>
             <span className="text-zinc-600">{total}</span>
           </div>
@@ -308,20 +604,30 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
           >
             {player.volume === 0 ? <VolumeX size={15} /> : <Volume2 size={15} />}
           </button>
-          <input
-            type="range"
-            min={0}
-            max={1}
-            step={0.01}
-            value={player.volume}
-            onChange={(e) => setVolume(parseFloat(e.target.value))}
-            disabled={cast.isCasting}
-            className={`h-1 appearance-none rounded-full volume-slider ${
-              cast.isCasting ? 'cursor-not-allowed opacity-40' : 'cursor-pointer'
-            }`}
-            style={{ '--progress': `${player.volume * 100}%`, width: '84px' } as React.CSSProperties}
-            title={cast.isCasting ? 'Local volume disabled while casting' : 'Volume'}
-          />
+          <div
+            className={`relative shrink-0 ${cast.isCasting ? 'opacity-40' : ''}`}
+            style={{ width: `${VOLUME_SLIDER_WIDTH}px`, height: `${VOLUME_SLIDER_THUMB_SIZE}px` }}
+          >
+            <div className="absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-zinc-700 pointer-events-none" />
+            <div
+              className="absolute left-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-emerald-500 pointer-events-none"
+              style={{ width: `${volumeTrackProgressPct}%` }}
+            />
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.01}
+              value={player.volume}
+              onChange={(e) => setVolume(parseFloat(e.target.value))}
+              disabled={cast.isCasting}
+              className={`absolute inset-0 w-full appearance-none bg-transparent volume-slider ${
+                cast.isCasting ? 'cursor-not-allowed' : 'cursor-pointer'
+              }`}
+              style={{ '--progress': `${volumeProgressPct}%` } as React.CSSProperties}
+              title={cast.isCasting ? 'Local volume disabled while casting' : 'Volume'}
+            />
+          </div>
           <button
             onClick={onLyricsToggle}
             className={`transition-colors shrink-0 ${

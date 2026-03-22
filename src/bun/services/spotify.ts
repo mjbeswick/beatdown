@@ -66,6 +66,63 @@ function getTrackAlbumNameFromRecord(record: Record<string, unknown>): string | 
   return getAlbumName(record['album']) ?? getAlbumName(record['albumOfTrack']);
 }
 
+function normalizeDurationSeconds(value: number): number | undefined {
+  if (!Number.isFinite(value) || value <= 0) return undefined;
+  return Math.max(1, Math.round(value));
+}
+
+function parseDurationText(value: string): number | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+
+  if (/^\d+$/.test(trimmed)) {
+    return normalizeDurationSeconds(Number.parseInt(trimmed, 10));
+  }
+
+  const parts = trimmed.split(':').map((part) => Number.parseInt(part, 10));
+  if (parts.some((part) => Number.isNaN(part))) return undefined;
+
+  if (parts.length === 2) {
+    return normalizeDurationSeconds(parts[0] * 60 + parts[1]);
+  }
+
+  if (parts.length === 3) {
+    return normalizeDurationSeconds(parts[0] * 3600 + parts[1] * 60 + parts[2]);
+  }
+
+  return undefined;
+}
+
+function getTrackDurationSecondsFromRecord(record: Record<string, unknown>): number | undefined {
+  const durationMs = record['duration_ms'] ?? record['durationMs'];
+  if (typeof durationMs === 'number') {
+    return normalizeDurationSeconds(durationMs / 1000);
+  }
+
+  const durationSeconds = record['duration_seconds'] ?? record['durationSeconds'] ?? record['duration_sec'];
+  if (typeof durationSeconds === 'number') {
+    return normalizeDurationSeconds(durationSeconds);
+  }
+
+  const rawDuration = record['duration'];
+  if (typeof rawDuration === 'number' && rawDuration > 0 && rawDuration <= 12 * 60 * 60) {
+    return normalizeDurationSeconds(rawDuration);
+  }
+  if (typeof rawDuration === 'string') {
+    const parsed = parseDurationText(rawDuration);
+    if (parsed) return parsed;
+  }
+
+  for (const key of ['durationText', 'duration_text', 'durationString', 'duration_string']) {
+    const value = record[key];
+    if (typeof value !== 'string') continue;
+    const parsed = parseDurationText(value);
+    if (parsed) return parsed;
+  }
+
+  return undefined;
+}
+
 function decodeFullPageInitialState(html: string): unknown | null {
   const match = html.match(/<script id="initialState" type="text\/plain">([\s\S]*?)<\/script>/);
   if (!match?.[1]) return null;
@@ -135,6 +192,7 @@ function extractTracksFromJson(obj: unknown, tracks: ExtractedSpotifyTrack[] = [
         title: o['name'] as string,
         artist: artists.map((a) => a.name).join(', '),
         album: getTrackAlbumNameFromRecord(o),
+        durationSeconds: getTrackDurationSecondsFromRecord(o),
         spotifyId: extractSpotifyTrackId(o['uri']) ?? (typeof o['id'] === 'string' ? o['id'] : undefined),
       });
       return tracks;
@@ -148,6 +206,7 @@ function extractTracksFromJson(obj: unknown, tracks: ExtractedSpotifyTrack[] = [
           title: item['title'] as string,
           artist: (item['subtitle'] as string).replace(/\u00a0/g, ' '),
           album: getTrackAlbumNameFromRecord(item),
+          durationSeconds: getTrackDurationSecondsFromRecord(item),
           spotifyId: extractSpotifyTrackId(item['uri']),
         });
       }

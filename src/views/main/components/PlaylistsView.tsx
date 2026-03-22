@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useUnit } from 'effector-react';
-import { ListMusic, Play, Music2, Pause, PlayCircle, Loader2, Clock3, Download as DownloadIcon, Trash2, ExternalLink, MoreHorizontal } from 'lucide-react';
-import { $downloads, $search, pauseDownloadFx, resumeDownloadFx, redownloadFx, removeDownloadFx, getPrimaryDownloadAction } from '../stores/downloads';
+import { ListMusic, Play, Music2, Pause, PlayCircle, Loader2, Clock3, Download as DownloadIcon, Trash2, ExternalLink, MoreHorizontal, X, Image } from 'lucide-react';
+import { $downloads, $search, pauseDownloadFx, resumeDownloadFx, redownloadFx, removeDownloadFx, getPrimaryDownloadAction, downloadUpdated } from '../stores/downloads';
 import { enqueueTrack, playDownloadPlaylist } from '../stores/player';
 import type { DownloadItem, DownloadStatus } from '../../../shared/types';
 import { getTrackAlbumName } from '../../../shared/track-metadata';
@@ -130,13 +130,71 @@ function PlaylistListStatus({ status }: { status: DownloadStatus }) {
   }
 }
 
+function CoverArtModal({ item, onClose }: { item: DownloadItem; onClose: () => void }) {
+  const [url, setUrl] = useState('');
+  const [imgValid, setImgValid] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!url.trim() || submitting) return;
+    setSubmitting(true);
+    const updated = await rpc.proxy.request['download:setCoverArt']({ id: item.id, url: url.trim() }).catch(() => null);
+    if (updated) downloadUpdated(updated);
+    setSubmitting(false);
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+      <div
+        className="relative z-10 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl w-80 p-5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button onClick={onClose} className="absolute top-3 right-3 text-zinc-500 hover:text-zinc-300 transition-colors">
+          <X size={16} />
+        </button>
+        <h2 className="text-zinc-200 font-semibold text-sm mb-4">Set artwork</h2>
+
+        <div className="w-full aspect-square bg-zinc-800 rounded-lg mb-4 flex items-center justify-center overflow-hidden">
+          {url && imgValid ? (
+            <img src={url} alt="" className="w-full h-full object-cover" onError={() => setImgValid(false)} />
+          ) : (
+            <ListMusic size={40} className="text-zinc-600" />
+          )}
+        </div>
+
+        <input
+          autoFocus
+          type="url"
+          value={url}
+          onChange={(e) => { setUrl(e.target.value); setImgValid(true); }}
+          onKeyDown={(e) => { if (e.key === 'Enter') void handleSubmit(); if (e.key === 'Escape') onClose(); }}
+          placeholder="Paste image URL…"
+          className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder-zinc-600 outline-none focus:border-zinc-500 mb-3"
+        />
+
+        <button
+          onClick={() => void handleSubmit()}
+          disabled={!url.trim() || !imgValid || submitting}
+          className="w-full flex items-center justify-center gap-2 bg-emerald-700 hover:bg-emerald-600 disabled:bg-zinc-700 disabled:text-zinc-400 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+        >
+          {submitting ? <Loader2 size={14} className="animate-spin" /> : <Image size={14} />}
+          Use this artwork
+        </button>
+      </div>
+    </div>
+  );
+}
+
 interface PlaylistListItemProps {
   item: DownloadItem;
   isSelected: boolean;
   onSelect: (id: string) => void;
+  onSetArtwork: (item: DownloadItem) => void;
 }
 
-function PlaylistListItem({ item, isSelected, onSelect }: PlaylistListItemProps) {
+function PlaylistListItem({ item, isSelected, onSelect, onSetArtwork }: PlaylistListItemProps) {
   const { pos, open, close } = useContextMenu();
   const playableTracks = getPlayableTracks(item);
   const primaryDownloadAction = getPrimaryDownloadAction(item);
@@ -179,12 +237,11 @@ function PlaylistListItem({ item, isSelected, onSelect }: PlaylistListItemProps)
     );
   }
 
-  menuItems.push({
-    label: 'Remove',
-    icon: <Trash2 size={13} />,
-    onClick: () => removeDownloadFx(item.id),
-    danger: true,
-  });
+  menuItems.push(
+    { label: 'Set artwork', icon: <Image size={13} />, onClick: () => onSetArtwork(item) },
+    { separator: true },
+    { label: 'Remove', icon: <Trash2 size={13} />, onClick: () => removeDownloadFx(item.id), danger: true }
+  );
 
   return (
     <>
@@ -257,6 +314,7 @@ export default function PlaylistsView() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = playlists.find((p) => p.id === selectedId) ?? playlists[0] ?? null;
   const { pos: headerMenuPos, open: openHeaderMenu, close: closeHeaderMenu } = useContextMenu();
+  const [coverArtModalItem, setCoverArtModalItem] = useState<DownloadItem | null>(null);
 
   if (playlists.length === 0) {
     return (
@@ -317,12 +375,11 @@ export default function PlaylistsView() {
       );
     }
 
-    headerMenuItems.push({
-      label: 'Remove',
-      icon: <Trash2 size={13} />,
-      onClick: () => removeDownloadFx(selected.id),
-      danger: true,
-    });
+    headerMenuItems.push(
+      { label: 'Set artwork', icon: <Image size={13} />, onClick: () => setCoverArtModalItem(selected) },
+      { separator: true },
+      { label: 'Remove', icon: <Trash2 size={13} />, onClick: () => removeDownloadFx(selected.id), danger: true }
+    );
   }
 
   return (
@@ -346,6 +403,7 @@ export default function PlaylistsView() {
                     item={item}
                     isSelected={item.id === selected?.id}
                     onSelect={setSelectedId}
+                    onSetArtwork={setCoverArtModalItem}
                   />
                 );
               })}
@@ -433,7 +491,7 @@ export default function PlaylistsView() {
               <div className="w-8 shrink-0" />
               <div className="flex-[3] min-w-0">Title</div>
               <div className="flex-[2] min-w-0">Artist</div>
-              <div className="w-16 shrink-0" />
+              <div className="w-24 shrink-0 text-right">Time</div>
             </div>
 
             <div className="flex-1 overflow-y-auto overflow-x-hidden">
@@ -453,6 +511,9 @@ export default function PlaylistsView() {
           </div>
         )}
       </ResizablePaneLayout>
+      {coverArtModalItem && (
+        <CoverArtModal item={coverArtModalItem} onClose={() => setCoverArtModalItem(null)} />
+      )}
     </main>
   );
 }

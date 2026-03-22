@@ -5,17 +5,6 @@ import { $search, searchChanged, fetchPreviewFx } from '../stores/downloads';
 import { $nav, navChanged } from '../stores/nav';
 import type { NavSection } from '../stores/nav';
 
-const NAV_TITLES: Record<NavSection, string> = {
-  nowplaying: 'Now Playing',
-  playlists: 'Playlists',
-  albums: 'Albums',
-  artists: 'Artists',
-  genres: 'Genres',
-  favourites: 'Favourites',
-  visualizer: 'Visualizer',
-  settings: 'Settings',
-};
-
 const NAV_PLACEHOLDER: Partial<Record<NavSection, string>> = {
   nowplaying: 'Filter queue by title…',
   playlists: 'Search or paste a Spotify URL or YouTube Music playlist URL…',
@@ -54,12 +43,8 @@ export default function Header() {
       style={{ WebkitUserSelect: 'none', cursor: 'default' } as React.CSSProperties}
       onDoubleClick={() => rpc.proxy.request['window:zoom'](undefined as any)}
     >
-      {/* Left: traffic-light spacer + view title */}
-      <div className="flex items-center gap-3 w-64 shrink-0 pl-20">
-        <span className="text-zinc-300 text-sm font-semibold truncate">
-          {NAV_TITLES[nav]}
-        </span>
-      </div>
+      {/* Left: keep a drag-safe spacer clear of the macOS window controls */}
+      <div className="w-24 shrink-0" />
 
       {/* Centre: context-sensitive search / URL bar */}
       {showSearch && (
@@ -72,6 +57,15 @@ export default function Header() {
             type="text"
             value={search}
             onChange={(e) => searchChanged(e.target.value)}
+            onPaste={(e) => {
+              const pasted = e.clipboardData.getData('text').trim();
+              if (isUrl(pasted)) {
+                e.preventDefault();
+                navChanged('playlists');
+                fetchPreviewFx(pasted);
+                searchChanged('');
+              }
+            }}
             placeholder={placeholder}
             className="flex-1 min-w-0 bg-transparent text-sm placeholder:text-zinc-600 text-zinc-300 outline-none"
             style={{ WebkitUserSelect: 'text', cursor: 'text' } as React.CSSProperties}
