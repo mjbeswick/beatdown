@@ -2,6 +2,8 @@
 
 A macOS desktop app for downloading and managing your music library. Paste a Spotify or YouTube Music URL and Beatdown finds the audio, downloads it, and tags it — all stored locally on your machine.
 
+![Beatdown](assets/screenshot.png)
+
 > **Legal disclaimer:** Beatdown is intended for personal, offline use of music you already have legitimate access to (e.g. an active Spotify subscription). Downloading copyrighted content without authorisation may violate the terms of service of the platforms involved and applicable copyright law in your jurisdiction. You are solely responsible for how you use this software. The authors do not condone piracy or any use that infringes on the rights of artists or rights holders.
 
 ## Requirements
