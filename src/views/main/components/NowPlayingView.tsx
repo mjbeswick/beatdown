@@ -21,6 +21,12 @@ import {
 import { navToAlbum, navToArtist, navChanged } from '../stores/nav';
 import { $favourites, toggleFavourite } from '../stores/favourites';
 import { $search, removeTrackFx } from '../stores/downloads';
+import {
+  $nowPlayingSpectrumStyle,
+  $nowPlayingSpectrumVisible,
+  patchAppSettings,
+  type NowPlayingSpectrumStyle,
+} from '../stores/appSettings';
 import { rpc } from '../rpc';
 import { createFuzzySearchMatcher } from '../lib/search';
 import { confirmQueueRemoval } from '../lib/destructiveActionConfirm';
@@ -31,6 +37,12 @@ import SpectrumAnalyzer from './SpectrumAnalyzer';
 import { useContextMenu } from '../hooks/useContextMenu';
 
 type Tab = 'queue' | 'lyrics';
+
+const NOW_PLAYING_SPECTRUM_STYLE_OPTIONS: { value: NowPlayingSpectrumStyle; label: string }[] = [
+  { value: 'classic', label: 'Classic' },
+  { value: 'split', label: 'Split Mirror' },
+  { value: 'dense', label: 'Dense Bands' },
+];
 
 interface Props {
   showSidebar: boolean;
@@ -48,6 +60,8 @@ export default function NowPlayingView({
   const player = useUnit($player);
   const favourites = useUnit($favourites);
   const search = useUnit($search);
+  const nowPlayingSpectrumVisible = useUnit($nowPlayingSpectrumVisible);
+  const nowPlayingSpectrumStyle = useUnit($nowPlayingSpectrumStyle);
   const { pos: albumArtMenuPos, open: openAlbumArtMenu, close: closeAlbumArtMenu } = useContextMenu();
   const [showConfig, setShowConfig] = useState(false);
   const [lyrics, setLyrics] = useState<LyricLine[] | null>(null);
@@ -75,22 +89,24 @@ export default function NowPlayingView({
     setMarqueeShift(overflow > 4 ? overflow : 0);
   }, [current?.track.title]);
 
-  const [bgSlots, setBgSlots] = useState<[string | undefined, string | undefined]>([
-    current?.coverArt,
-    undefined,
-  ]);
-  const [activeSlot, setActiveSlot] = useState<0 | 1>(0);
+  const [bgState, setBgState] = useState<{
+    slots: [string | undefined, string | undefined];
+    active: 0 | 1;
+  }>({
+    slots: [current?.coverArt, undefined],
+    active: 0,
+  });
 
   useEffect(() => {
     const art = current?.coverArt;
-    setActiveSlot((prev) => {
-      const next = prev === 0 ? 1 : 0;
-      setBgSlots((slots) => {
-        const updated: [string | undefined, string | undefined] = [slots[0], slots[1]];
-        updated[next] = art;
-        return updated;
-      });
-      return next;
+    setBgState((prev) => {
+      const next = prev.active === 0 ? 1 : 0;
+      const slots: [string | undefined, string | undefined] = [prev.slots[0], prev.slots[1]];
+      slots[next] = art;
+      return {
+        slots,
+        active: next,
+      };
     });
   }, [current?.coverArt]);
 
@@ -505,6 +521,45 @@ export default function NowPlayingView({
                   className="h-4 w-4 shrink-0 accent-emerald-500"
                 />
               </label>
+
+              <label className="flex items-center justify-between gap-4 rounded-xl border border-zinc-100/10 bg-zinc-100/[0.03] px-3 py-2.5">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-zinc-100">Show spectrum</p>
+                  <p className="mt-0.5 text-xs text-zinc-500">Display the live frequency analyzer under track info.</p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={nowPlayingSpectrumVisible}
+                  onChange={(e) => patchAppSettings({ nowPlayingSpectrumVisible: e.target.checked })}
+                  className="h-4 w-4 shrink-0 accent-emerald-500"
+                />
+              </label>
+
+              <label className="flex items-center justify-between gap-4 rounded-xl border border-zinc-100/10 bg-zinc-100/[0.03] px-3 py-2.5">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-zinc-100">Spectrum style</p>
+                  <p className="mt-0.5 text-xs text-zinc-500">Choose the visual style of the analyzer bars.</p>
+                </div>
+                <div className="relative w-36 shrink-0">
+                  <select
+                    value={nowPlayingSpectrumStyle}
+                    onChange={(e) =>
+                      patchAppSettings({
+                        nowPlayingSpectrumStyle: e.target.value as NowPlayingSpectrumStyle,
+                      })
+                    }
+                    disabled={!nowPlayingSpectrumVisible}
+                    className="w-full rounded-lg border border-zinc-700/70 bg-zinc-900/80 px-2.5 py-1.5 pr-7 text-xs text-zinc-200 outline-none transition-colors hover:border-zinc-600 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {NOW_PLAYING_SPECTRUM_STYLE_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-zinc-500">▾</span>
+                </div>
+              </label>
             </div>
           )}
         </div>
@@ -610,7 +665,9 @@ export default function NowPlayingView({
           </button>
         </div>
 
-        <SpectrumAnalyzer />
+        {nowPlayingSpectrumVisible && (
+          <SpectrumAnalyzer style={nowPlayingSpectrumStyle} />
+        )}
       </div>
     </div>
   );
@@ -618,15 +675,15 @@ export default function NowPlayingView({
   return (
     <div className="now-playing-view relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
       {([0, 1] as const).map((slot) =>
-        bgSlots[slot] ? (
+        bgState.slots[slot] ? (
           <img
             key={slot}
-            src={bgSlots[slot]}
+            src={bgState.slots[slot]}
             aria-hidden
             className="now-playing-blur-art absolute inset-0 w-full h-full object-cover scale-150 pointer-events-none select-none"
             style={{
-              opacity: activeSlot === slot ? 1 : 0,
-              transition: 'opacity 1.4s ease',
+              opacity: bgState.active === slot ? 1 : 0,
+              transition: 'opacity 0.7s ease-out',
             }}
           />
         ) : null

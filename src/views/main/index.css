@@ -80,21 +80,21 @@ body {
 
 /* ── Now Playing light-theme tuning ───────────────────────────────────────── */
 .now-playing-view {
-  --now-playing-blur-filter: blur(72px) saturate(2.15) brightness(0.5) contrast(1.05);
+  --now-playing-blur-filter: blur(40px) saturate(1.95) brightness(0.56) contrast(1.02);
   --now-playing-overlay:
     radial-gradient(circle at top center, rgba(16, 185, 129, 0.18) 0%, transparent 34%),
-    radial-gradient(circle at 16% 18%, rgba(255, 255, 255, 0.1) 0%, transparent 28%),
     linear-gradient(
       135deg,
-      rgba(24, 24, 27, 0.18) 0%,
-      rgba(24, 24, 27, 0.36) 45%,
-      rgba(9, 9, 11, 0.68) 100%
+      rgba(24, 24, 27, 0.24) 0%,
+      rgba(24, 24, 27, 0.42) 45%,
+      rgba(9, 9, 11, 0.72) 100%
     );
   --now-playing-active-lyric-shadow: 0 0 20px rgba(255, 255, 255, 0.2);
 }
 
 .now-playing-blur-art {
   filter: var(--now-playing-blur-filter);
+  will-change: opacity;
 }
 
 .now-playing-overlay {
@@ -102,15 +102,14 @@ body {
 }
 
 .light-theme .now-playing-view {
-  --now-playing-blur-filter: blur(82px) saturate(1.12) brightness(1.16) contrast(0.96);
+  --now-playing-blur-filter: blur(46px) saturate(1.08) brightness(1.12) contrast(0.98);
   --now-playing-overlay:
     radial-gradient(circle at top center, rgba(16, 185, 129, 0.12) 0%, transparent 38%),
-    radial-gradient(circle at 12% 14%, rgba(255, 255, 255, 0.42) 0%, transparent 28%),
     linear-gradient(
       135deg,
-      rgba(255, 255, 255, 0.72) 0%,
-      rgba(255, 255, 255, 0.54) 40%,
-      rgba(244, 244, 245, 0.58) 100%
+      rgba(255, 255, 255, 0.7) 0%,
+      rgba(255, 255, 255, 0.58) 44%,
+      rgba(244, 244, 245, 0.62) 100%
     );
   --now-playing-active-lyric-shadow: 0 0 18px rgba(255, 255, 255, 0.72);
 }

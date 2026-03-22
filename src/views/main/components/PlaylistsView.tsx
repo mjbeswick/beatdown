@@ -108,6 +108,17 @@ function enqueueDownloadedPlaylist(playlist: DownloadItem) {
   }
 }
 
+function formatPlaylistTrackCount(completedTracks: number, totalTracks: number): string {
+  const resolvedTrackCount = completedTracks >= totalTracks ? totalTracks : completedTracks;
+  const trackLabel = resolvedTrackCount === 1 ? 'track' : 'tracks';
+
+  if (totalTracks > 0 && completedTracks >= totalTracks) {
+    return `${totalTracks} ${trackLabel}`;
+  }
+
+  return `${completedTracks} / ${totalTracks} ${trackLabel}`;
+}
+
 function PlaylistListStatus({ status }: { status: DownloadStatus }) {
   switch (status) {
     case 'active':
@@ -278,7 +289,7 @@ function PlaylistListItem({ item, isSelected, onSelect, onSetArtwork }: Playlist
           <div className="text-zinc-300 text-xs truncate">{item.name}</div>
           <div className="flex items-center gap-2 text-xs min-w-0">
             <span className="text-zinc-600 truncate">
-              {playableTracks.length}/{item.totalTracks} tracks
+              {formatPlaylistTrackCount(playableTracks.length, item.totalTracks)}
               {sizeLabel ? ` · ${sizeLabel}` : ''}
             </span>
             {showStatus ? (
@@ -425,7 +436,7 @@ export default function PlaylistsView() {
                 <div className="text-zinc-200 font-semibold text-sm truncate">{selected.name}</div>
                 <div className="mt-0.5 flex items-center gap-3 text-xs min-w-0">
                   <span className="text-zinc-500">
-                    {doneTracks.length} / {selected.totalTracks} tracks
+                    {formatPlaylistTrackCount(doneTracks.length, selected.totalTracks)}
                     {selectedSizeLabel ? ` · ${selectedSizeLabel} on disk` : ''}
                   </span>
                   {sourceLink && (

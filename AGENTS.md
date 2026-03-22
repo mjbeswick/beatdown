@@ -25,3 +25,5 @@ Testing expectations:
 Commit expectations:
 - Do not create a commit unless the user explicitly asks for one.
 - When a commit is requested, use a clear message that describes the behavior change.
+
+We are using Electrobun, which is a fork of Electron that uses Bun instead of Node. This means that some Electron APIs may not be available or may behave differently. When making changes, be mindful of the differences between Electron and Electrobun, and test your changes accordingly.

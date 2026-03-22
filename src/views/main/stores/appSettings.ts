@@ -4,6 +4,7 @@ import { loadSettingsFx } from './settingsLoader';
 
 export type PlayerSeekerStyle = 'bar' | 'waveform';
 export type DjMode = 'off' | 'gapless' | 'crossfade' | 'beatmatch';
+export type NowPlayingSpectrumStyle = 'classic' | 'split' | 'dense';
 export type NavSection = 'nowplaying' | 'playlists' | 'albums' | 'artists' | 'genres' | 'favourites' | 'visualizer' | 'settings';
 
 export const MIN_WAVEFORM_BAR_WIDTH = 1;
@@ -22,6 +23,8 @@ export interface AppSettings {
   waveformBarFullRounding: boolean;
   djMode: DjMode;
   crossfadeDuration: number; // seconds, 2–16
+  nowPlayingSpectrumVisible: boolean;
+  nowPlayingSpectrumStyle: NowPlayingSpectrumStyle;
   maxConcurrentDownloads: number; // 1–6
   selectedView: NavSection;
 }
@@ -41,6 +44,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   waveformBarFullRounding: false,
   djMode: 'off',
   crossfadeDuration: 8,
+  nowPlayingSpectrumVisible: true,
+  nowPlayingSpectrumStyle: 'classic',
   maxConcurrentDownloads: 3,
   selectedView: 'playlists' as NavSection,
 };
@@ -64,6 +69,10 @@ export function getWaveformBarRadius(
 
 function sanitizePlayerSeekerStyle(value: unknown): PlayerSeekerStyle {
   return value === 'waveform' ? 'waveform' : DEFAULT_SETTINGS.playerSeekerStyle;
+}
+
+function sanitizeNowPlayingSpectrumStyle(value: unknown): NowPlayingSpectrumStyle {
+  return value === 'split' || value === 'dense' ? value : DEFAULT_SETTINGS.nowPlayingSpectrumStyle;
 }
 
 const VALID_NAV_SECTIONS: NavSection[] = ['nowplaying', 'playlists', 'albums', 'artists', 'genres', 'favourites', 'visualizer', 'settings'];
@@ -116,6 +125,11 @@ function sanitizeSettings(input: PersistedAppSettings | null | undefined): AppSe
       typeof input?.crossfadeDuration === 'number'
         ? clamp(input.crossfadeDuration, 2, 16)
         : DEFAULT_SETTINGS.crossfadeDuration,
+    nowPlayingSpectrumVisible:
+      typeof input?.nowPlayingSpectrumVisible === 'boolean'
+        ? input.nowPlayingSpectrumVisible
+        : DEFAULT_SETTINGS.nowPlayingSpectrumVisible,
+    nowPlayingSpectrumStyle: sanitizeNowPlayingSpectrumStyle(input?.nowPlayingSpectrumStyle),
     maxConcurrentDownloads:
       typeof input?.maxConcurrentDownloads === 'number'
         ? clamp(input.maxConcurrentDownloads, 1, 6)
@@ -149,3 +163,23 @@ export const $appSettings = createStore<AppSettings>(loadSettings())
   .on(setConfirmDeleteActions, (state, confirmDeleteActions) =>
     applyPatch(state, { confirmDeleteActions })
   );
+
+export const $nowPlayingSpectrumVisible = $appSettings.map(
+  (settings) => settings.nowPlayingSpectrumVisible
+);
+
+export const $nowPlayingSpectrumStyle = $appSettings.map(
+  (settings) => settings.nowPlayingSpectrumStyle
+);
+
+export const $playerSeekerStyle = $appSettings.map(
+  (settings) => settings.playerSeekerStyle
+);
+
+export const $playerSeekerBeatPulse = $appSettings.map(
+  (settings) => settings.playerSeekerBeatPulse
+);
+
+export const $waveformHeight = $appSettings.map(
+  (settings) => settings.waveformHeight
+);

@@ -1,64 +1,84 @@
-import { useEffect, useRef } from 'react';
+import { memo, useEffect, useRef } from 'react';
 import AudioMotionAnalyzer from 'audiomotion-analyzer';
-import { getActiveDeck, getAnalyserNode, getAudioContext } from '../audio/engine';
+import { getAnalyserNode, getAudioContext, onAudioReady } from '../audio/engine';
+import type { NowPlayingSpectrumStyle } from '../stores/appSettings';
 
-export default function SpectrumAnalyzer() {
+interface SpectrumAnalyzerProps {
+  style: NowPlayingSpectrumStyle;
+}
+
+function SpectrumAnalyzer({ style }: SpectrumAnalyzerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const analyzerRef = useRef<AudioMotionAnalyzer | null>(null);
 
   useEffect(() => {
     const container = containerRef.current;
-    if (!container) {
-      console.warn('SpectrumAnalyzer: container ref not set');
-      return;
-    }
+    if (!container) return;
 
-    console.log('SpectrumAnalyzer: container found, polling for audio...');
+    const initializeAnalyzer = (audioCtx: AudioContext, sourceNode: AnalyserNode) => {
+      if (analyzerRef.current || !containerRef.current) return;
 
-    // Poll for audio to be playing
-    const pollInterval = setInterval(() => {
-      if (analyzerRef.current) {
-        console.log('SpectrumAnalyzer: already initialized, stopping poll');
-        clearInterval(pollInterval);
-        return;
-      }
-
-      const deck = getActiveDeck();
-
-      console.log('SpectrumAnalyzer poll:', {
-        deckPlaying: deck?.paused === false,
-      });
-
-      // Need an active deck that's playing
-      if (!deck || deck.paused) {
-        return;
-      }
-
-      console.log('SpectrumAnalyzer: audio is playing, initializing...');
-
-      // Audio is ready, initialize AudioMotion
       try {
-        console.log('Container dimensions:', {
-          width: container.clientWidth,
-          height: container.clientHeight,
-        });
+        const styleOptions =
+          style === 'split'
+            ? {
+                mode: 4,
+                barSpace: 0.2,
+                gradient: 'prism' as const,
+                mirror: 1 as const,
+              }
+            : style === 'dense'
+              ? {
+                  mode: 10,
+                  barSpace: 0,
+                  gradient: 'steelblue' as const,
+                  mirror: 0 as const,
+                }
+              : {
+                  mode: 3,
+                  barSpace: 0,
+                  gradient: 'rainbow' as const,
+                  mirror: 0 as const,
+                };
 
         const analyzer = new AudioMotionAnalyzer(container, {
-          // Visualization mode (0 = bars)
-          mode: 0,
+          audioCtx,
+          connectSpeakers: false, // Don't output audio, just visualize
+          loRes: true,
+
+          ...styleOptions,
+
+          // Frame rate cap — canvas drawing runs on the main thread; uncapped it
+          // competes with React rendering and kills UI responsiveness.
+          maxFPS: 24,
 
           // Audio analysis
           fftSize: 2048,
-          smoothing: 0.8,
+          smoothing: 0.7,
+          minFreq: 60,
+          maxFreq: 12000,
+          minDecibels: -85,
+          maxDecibels: -35,
+          weightingFilter: '',
+
+          // Amplitude
+          linearAmplitude: true,
+          linearBoost: 1.0,
 
           // Colors
           colorMode: 'gradient',
-          gradient: 'rainbow',
+          channelLayout: 'single',
 
-          // Enable background so we can see the canvas
+          // Background
           overlay: true,
-          bgAlpha: 0.3,
-          showBgColor: true,
+          bgAlpha: 0,
+          showBgColor: false,
+
+          // Reflex / Mirror
+          reflexFit: true,
+          reflexRatio: 0,
+          reflexAlpha: 1,
+          reflexBright: 1,
 
           // Minimal UI
           showFPS: false,
@@ -67,38 +87,35 @@ export default function SpectrumAnalyzer() {
           showScaleY: false,
         });
 
-        console.log('SpectrumAnalyzer: AudioMotion initialized successfully', {
-          canvasSize: analyzer.canvas ? `${analyzer.canvas.width}x${analyzer.canvas.height}` : 'no canvas',
-        });
-
-        // Connect AudioMotion to the audio deck (the actual audio source)
+        // Connect AudioMotion to the audio engine's analyser node
         try {
-          analyzer.connectInput(deck);
-          console.log('SpectrumAnalyzer: connected to deck');
+          analyzer.connectInput(sourceNode);
         } catch (e) {
-          console.warn('SpectrumAnalyzer: could not connect to deck:', e);
+          console.warn('SpectrumAnalyzer: could not connect to source node:', e);
         }
 
         analyzerRef.current = analyzer;
-
-        // Start rendering
-        console.log('SpectrumAnalyzer: calling start()');
         analyzer.start();
-        console.log('SpectrumAnalyzer: started rendering');
-
-        clearInterval(pollInterval);
       } catch (error) {
         console.error('SpectrumAnalyzer: Failed to initialize AudioMotion:', error);
-        clearInterval(pollInterval);
       }
-    }, 100); // Poll every 100ms
+    };
 
-    console.log('SpectrumAnalyzer: poll interval started');
+    // Initialize immediately when audio is already available.
+    const audioCtx = getAudioContext();
+    const sourceNode = getAnalyserNode();
+    if (audioCtx && sourceNode) {
+      initializeAnalyzer(audioCtx, sourceNode);
+    }
+
+    // Fallback to event-driven initialization when engine is not ready yet.
+    const unsubscribeAudioReady = onAudioReady((readyCtx, readyAnalyser) => {
+      initializeAnalyzer(readyCtx, readyAnalyser);
+    });
 
     // Cleanup
     return () => {
-      console.log('SpectrumAnalyzer: cleaning up');
-      clearInterval(pollInterval);
+      unsubscribeAudioReady();
       if (analyzerRef.current) {
         try {
           analyzerRef.current.stop();
@@ -109,31 +126,41 @@ export default function SpectrumAnalyzer() {
         analyzerRef.current = null;
       }
     };
-  }, []);
+  }, [style]);
 
   // Handle window resize
   useEffect(() => {
+    let resizeTimeout: ReturnType<typeof setTimeout>;
+
     const handleResize = () => {
-      if (analyzerRef.current && containerRef.current) {
-        analyzerRef.current.setCanvasSize(
-          containerRef.current.clientWidth,
-          containerRef.current.clientHeight
-        );
-      }
+      if (resizeTimeout) clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(() => {
+        if (analyzerRef.current && containerRef.current) {
+          analyzerRef.current.setCanvasSize(
+            containerRef.current.clientWidth,
+            containerRef.current.clientHeight
+          );
+        }
+      }, 100);
     };
 
     window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      if (resizeTimeout) clearTimeout(resizeTimeout);
+    };
   }, []);
 
   return (
     <div
       ref={containerRef}
-      className="w-full shrink-0 bg-white border border-zinc-700"
+      className="w-full shrink-0"
       style={{
         height: 'clamp(8rem, 15vmin, 14rem)',
-        marginTop: 'clamp(1rem, 2vmin, 1.5rem)',
+        contain: 'layout paint size',
       }}
     />
   );
 }
+
+export default memo(SpectrumAnalyzer);

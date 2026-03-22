@@ -18,6 +18,9 @@ let gainNode: GainNode | null = null;    // master volume
 let gainNodeA: GainNode | null = null;  // deck A crossfade gain
 let gainNodeB: GainNode | null = null;  // deck B crossfade gain
 
+type AudioReadyListener = (audioContext: AudioContext, analyser: AnalyserNode) => void;
+const audioReadyListeners = new Set<AudioReadyListener>();
+
 // Two decks. `audio` always points to the currently active deck.
 const deckA = new Audio();
 const deckB = new Audio();
@@ -51,6 +54,17 @@ function syncOutputVolume(volume: number = $player.getState().volume): void {
   applyVolume($cast.getState().isCasting ? 0 : volume);
 }
 
+function emitAudioReady(): void {
+  if (!audioCtx || !analyserNode) return;
+  for (const listener of audioReadyListeners) {
+    try {
+      listener(audioCtx, analyserNode);
+    } catch (error) {
+      console.warn('Audio ready listener threw:', error);
+    }
+  }
+}
+
 function getOrCreateCtx(): AudioContext {
   if (!audioCtx) {
     audioCtx = new AudioContext();
@@ -81,6 +95,7 @@ function getOrCreateCtx(): AudioContext {
     gainNode.connect(audioCtx.destination);
 
     syncOutputVolume();
+    emitAudioReady();
   }
   return audioCtx;
 }
@@ -91,6 +106,20 @@ export function getAnalyserNode(): AnalyserNode | null {
 
 export function getAudioContext(): AudioContext | null {
   return audioCtx;
+}
+
+export function onAudioReady(listener: AudioReadyListener): () => void {
+  audioReadyListeners.add(listener);
+  if (audioCtx && analyserNode) {
+    try {
+      listener(audioCtx, analyserNode);
+    } catch (error) {
+      console.warn('Audio ready listener threw:', error);
+    }
+  }
+  return () => {
+    audioReadyListeners.delete(listener);
+  };
 }
 
 // ── Deck B connection (lazy — called by DJ engine before first crossfade) ──────

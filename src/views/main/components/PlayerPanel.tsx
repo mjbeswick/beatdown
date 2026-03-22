@@ -30,7 +30,12 @@ import {
 import { $cast, devicesDiscovered, discoveringStarted, deviceSelected } from '../stores/cast';
 import { navToAlbum, navToArtist } from '../stores/nav';
 import { $favourites, toggleFavourite } from '../stores/favourites';
-import { $appSettings } from '../stores/appSettings';
+import {
+  $nowPlayingSpectrumVisible,
+  $playerSeekerBeatPulse,
+  $playerSeekerStyle,
+  $waveformHeight,
+} from '../stores/appSettings';
 import { rpc } from '../rpc';
 import WaveformSeeker from './WaveformSeeker';
 import { getActiveDeck, getAnalyserNode } from '../audio/engine';
@@ -46,13 +51,13 @@ const WAVEFORM_SEEKER_TOP_PADDING = 12;
 const WAVEFORM_SEEKER_SIDE_PADDING = 16;
 const VOLUME_SLIDER_WIDTH = 84;
 const VOLUME_SLIDER_THUMB_SIZE = 12;
-// Half the thumb dot diameter (h-3.5 = 14px) — used to centre translateX on the bar
-const THUMB_HALF_PX = 7;
 const THUMB_PULSE_MIN_SCALE = 0.88;
 const THUMB_PULSE_MAX_BOOST = 0.56;
 const THUMB_PULSE_DECAY_RATIO = 0.42;
 const THUMB_PULSE_MIN_DECAY_SECS = 0.12;
 const THUMB_PULSE_MAX_DECAY_SECS = 0.24;
+const FFT_SAMPLE_INTERVAL_MS = 1000 / 30;
+const FFT_SAMPLE_INTERVAL_WHILE_SPECTRUM_MS = 1000 / 18;
 
 interface Props {
   onLyricsToggle: () => void;
@@ -83,18 +88,21 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
   const player = useUnit($player);
   const cast = useUnit($cast);
   const favourites = useUnit($favourites);
-  const appSettings = useUnit($appSettings);
-  const isWaveformSeeker = appSettings.playerSeekerStyle === 'waveform';
+  const playerSeekerStyle = useUnit($playerSeekerStyle);
+  const playerSeekerBeatPulse = useUnit($playerSeekerBeatPulse);
+  const waveformHeight = useUnit($waveformHeight);
+  const nowPlayingSpectrumVisible = useUnit($nowPlayingSpectrumVisible);
+  const isWaveformSeeker = playerSeekerStyle === 'waveform';
   const [castOpen, setCastOpen] = useState(false);
   const castRef = useRef<HTMLDivElement>(null);
   const seekerTooltipRef = useRef<HTMLDivElement>(null);
-  const [isScrubbing, setIsScrubbing] = useState(false);
   const isScrubbingRef = useRef(false);
   const scrubRectRef = useRef<DOMRect | null>(null);
+  const lastSeekTimeRef = useRef(0);
 
   const applyScrubPosition = (progress: number, time: number) => {
     if (fillRef.current) fillRef.current.style.transform = `scaleX(${progress})`;
-    if (thumbRef.current) thumbRef.current.style.transform = `translate3d(${progress * seekerWidthRef.current - THUMB_HALF_PX}px, -50%, 0)`;
+    if (thumbRef.current) thumbRef.current.style.left = `${progress * 100}%`;
     if (timeElapsedRef.current) timeElapsedRef.current.textContent = formatTime(time);
     if (rangeRef.current) rangeRef.current.value = String(time);
   };
@@ -103,24 +111,10 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
   // fill and thumb are driven by the position RAF loop;
   // thumbDot is driven by the pulse RAF loop (bar fill is never touched by pulse).
   const seekerContainerRef = useRef<HTMLDivElement>(null);
-  const seekerWidthRef = useRef(0);
   const fillRef = useRef<HTMLDivElement>(null);
   const thumbRef = useRef<HTMLDivElement>(null);
   const thumbDotRef = useRef<HTMLDivElement>(null);
   const timeElapsedRef = useRef<HTMLSpanElement>(null);
-
-  // Cache the seeker container width so the RAF loop never reads clientWidth
-  // (a read after a style write forces a layout reflow every frame).
-  useEffect(() => {
-    const el = seekerContainerRef.current;
-    if (!el) return;
-    seekerWidthRef.current = el.clientWidth;
-    const ro = new ResizeObserver(([entry]) => {
-      seekerWidthRef.current = entry.contentRect.width;
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
 
   const playerDurationRef = useRef(player.duration);
   playerDurationRef.current = player.duration;
@@ -130,7 +124,7 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
   const [beatTiming, setBeatTiming] = useState<DetectedBeat | null>(null);
 
   useEffect(() => {
-    if (isWaveformSeeker || !appSettings.playerSeekerBeatPulse) {
+    if (isWaveformSeeker || !playerSeekerBeatPulse) {
       setBeatTiming(null);
       return;
     }
@@ -163,7 +157,7 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
       cancelled = true;
     };
   }, [
-    appSettings.playerSeekerBeatPulse,
+    playerSeekerBeatPulse,
     isWaveformSeeker,
     player.current?.track.id,
     player.current?.track.filePath,
@@ -197,22 +191,23 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
     const trackChanged = player.current?.track.id !== prevTrackIdRef.current;
     prevTrackIdRef.current = player.current?.track.id;
 
-    // While scrubbing, onChange owns all DOM updates — bail out here so
-    // timeupdate ticks don't overwrite the dragged position with a stale value.
-    if (isScrubbing) return;
+    // While scrubbing, the pointer handlers own all DOM updates — bail out here
+    // so timeupdate ticks don't overwrite the dragged position with a stale value.
+    // Use the ref (not state) so the guard is synchronous from pointerdown.
+    if (isScrubbingRef.current) return;
 
     const progress = player.duration > 0
       ? Math.max(0, Math.min(player.currentTime / player.duration, 1))
       : 0;
 
     fill.style.transition = trackChanged ? 'none' : 'transform 0.25s linear';
-    thumb.style.transition = trackChanged ? 'none' : 'transform 0.25s linear';
+    thumb.style.transition = trackChanged ? 'none' : 'left 0.25s linear';
     fill.style.transform = `scaleX(${progress})`;
-    thumb.style.transform = `translate3d(${progress * seekerWidthRef.current - THUMB_HALF_PX}px, -50%, 0)`;
+    thumb.style.left = `${progress * 100}%`;
     if (thumb.style.visibility === 'hidden') thumb.style.visibility = 'visible';
     if (timeElapsedRef.current) timeElapsedRef.current.textContent = formatTime(player.currentTime);
     if (rangeRef.current) rangeRef.current.value = String(player.currentTime);
-  }, [isWaveformSeeker, isScrubbing, player.currentTime, player.duration, player.current?.track.id]);
+  }, [isWaveformSeeker, player.currentTime, player.duration, player.current?.track.id]);
 
   // ── Pulse loop ───────────────────────────────────────────────────────────
   // Drives only the thumb dot (scale + glow). The bar fill is never affected.
@@ -224,7 +219,7 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
       }
     };
 
-    if (isWaveformSeeker || !appSettings.playerSeekerBeatPulse || isScrubbing || !player.isPlaying) {
+    if (isWaveformSeeker || !playerSeekerBeatPulse || !player.isPlaying) {
       resetDot();
       return;
     }
@@ -240,8 +235,20 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
     let pulseEnv = 0;
     let priorTransient = 0;
     let lastPulseAt = 0;
+    let lastFftReadAt = 0;
+    let lastAppliedScale = Number.NaN;
+    let lastAppliedShadow = '';
+    const fftSampleInterval = nowPlayingSpectrumVisible
+      ? FFT_SAMPLE_INTERVAL_WHILE_SPECTRUM_MS
+      : FFT_SAMPLE_INTERVAL_MS;
 
     const tick = () => {
+      if (isScrubbingRef.current) {
+        resetDot();
+        raf = requestAnimationFrame(tick);
+        return;
+      }
+
       const deck = getActiveDeck();
       const deckTime = deck.currentTime;
       const currentTime = Number.isFinite(deckTime) ? deckTime : player.currentTime;
@@ -250,34 +257,38 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
         const pulseStrength = getBeatPulseStrength(currentTime, beatTiming);
         smoothedScale = THUMB_PULSE_MIN_SCALE + Math.min(pulseStrength, 1) * THUMB_PULSE_MAX_BOOST;
       } else if (analyser && frequencyData) {
-        analyser.getByteFrequencyData(frequencyData);
-
-        const sampleBins = Math.max(12, Math.min(48, Math.floor(frequencyData.length * 0.14)));
-        let weightedEnergy = 0;
-        let totalWeight = 0;
-        let peakEnergy = 0;
-        for (let i = 0; i < sampleBins; i++) {
-          const norm = frequencyData[i] / 255;
-          const w = 1 - (i / sampleBins) * 0.7;
-          weightedEnergy += norm * w;
-          totalWeight += w;
-          if (norm > peakEnergy) peakEnergy = norm;
-        }
-
-        const avg = totalWeight > 0 ? weightedEnergy / totalWeight : 0;
-        const bassEnergy = avg * 0.65 + peakEnergy * 0.35;
-        fastBass += (bassEnergy - fastBass) * 0.52;
-        slowBass += (bassEnergy - slowBass) * 0.05;
-
-        const transient = Math.max(0, fastBass - slowBass * 0.98);
-        const normEnergy = Math.max(0, Math.min(1, (transient - 0.012) / 0.11));
         const now = performance.now();
-        if (normEnergy > 0.16 && normEnergy > priorTransient * 1.08 && now - lastPulseAt > 60) {
-          pulseEnv = Math.max(pulseEnv, 0.48 + normEnergy * 0.9);
-          lastPulseAt = now;
+        if (now - lastFftReadAt >= fftSampleInterval) {
+          lastFftReadAt = now;
+          analyser.getByteFrequencyData(frequencyData);
+
+          const sampleBins = Math.max(12, Math.min(48, Math.floor(frequencyData.length * 0.14)));
+          let weightedEnergy = 0;
+          let totalWeight = 0;
+          let peakEnergy = 0;
+          for (let i = 0; i < sampleBins; i++) {
+            const norm = frequencyData[i] / 255;
+            const w = 1 - (i / sampleBins) * 0.7;
+            weightedEnergy += norm * w;
+            totalWeight += w;
+            if (norm > peakEnergy) peakEnergy = norm;
+          }
+
+          const avg = totalWeight > 0 ? weightedEnergy / totalWeight : 0;
+          const bassEnergy = avg * 0.65 + peakEnergy * 0.35;
+          fastBass += (bassEnergy - fastBass) * 0.52;
+          slowBass += (bassEnergy - slowBass) * 0.05;
+
+          const transient = Math.max(0, fastBass - slowBass * 0.98);
+          const normEnergy = Math.max(0, Math.min(1, (transient - 0.012) / 0.11));
+          if (normEnergy > 0.16 && normEnergy > priorTransient * 1.08 && now - lastPulseAt > 60) {
+            pulseEnv = Math.max(pulseEnv, 0.48 + normEnergy * 0.9);
+            lastPulseAt = now;
+          }
+
+          priorTransient += (normEnergy - priorTransient) * 0.28;
         }
 
-        priorTransient += (normEnergy - priorTransient) * 0.28;
         pulseEnv = Math.max(0, pulseEnv * 0.8 - 0.02);
 
         // Fast attack with a lower resting scale gives a more obvious beat-driven
@@ -288,8 +299,19 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
 
       if (thumbDotRef.current) {
         const strength = Math.max(0, smoothedScale - 1) / (THUMB_PULSE_MIN_SCALE + THUMB_PULSE_MAX_BOOST - 1);
-        thumbDotRef.current.style.transform = `scale(${smoothedScale})`;
-        thumbDotRef.current.style.boxShadow = `0 0 ${3 + strength * 16}px rgba(52, 211, 153, ${0.1 + strength * 0.48})`;
+        const nextScale = Number(smoothedScale.toFixed(4));
+        if (!Number.isFinite(lastAppliedScale) || Math.abs(nextScale - lastAppliedScale) >= 0.003) {
+          thumbDotRef.current.style.transform = `scale(${nextScale})`;
+          lastAppliedScale = nextScale;
+        }
+
+        const nextShadow = strength < 0.02
+          ? ''
+          : `0 0 ${3 + strength * 16}px rgba(52, 211, 153, ${0.1 + strength * 0.48})`;
+        if (nextShadow !== lastAppliedShadow) {
+          thumbDotRef.current.style.boxShadow = nextShadow;
+          lastAppliedShadow = nextShadow;
+        }
       }
 
       raf = requestAnimationFrame(tick);
@@ -300,7 +322,13 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
       cancelAnimationFrame(raf);
       resetDot();
     };
-  }, [appSettings.playerSeekerBeatPulse, beatTiming, isScrubbing, isWaveformSeeker, player.isPlaying]);
+  }, [
+    beatTiming,
+    isWaveformSeeker,
+    nowPlayingSpectrumVisible,
+    player.isPlaying,
+    playerSeekerBeatPulse,
+  ]);
 
   const handleCastClick = async () => {
     if (cast.isCasting) {
@@ -357,7 +385,7 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
   );
 
   const seekerRowHeight = isWaveformSeeker
-    ? appSettings.waveformHeight + WAVEFORM_SEEKER_TOP_PADDING
+    ? waveformHeight + WAVEFORM_SEEKER_TOP_PADDING
     : REGULAR_SEEKER_HEIGHT;
 
   const playerPanelHeight = CONTROLS_ROW_HEIGHT + CONTROLS_ROW_PADDING * 2 + seekerRowHeight;
@@ -382,7 +410,6 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
           if (thumbRef.current) thumbRef.current.style.transition = 'none';
           applyScrubPosition(progress, time);
           isScrubbingRef.current = true;
-          setIsScrubbing(true);
           seek(time);
         }}
         onPointerMove={(e) => {
@@ -391,7 +418,11 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
             const progress = Math.max(0, Math.min((e.clientX - scrubRectRef.current.left) / scrubRectRef.current.width, 1));
             const time = progress * (playerDurationRef.current || 0);
             applyScrubPosition(progress, time);
-            seek(time);
+            const now = performance.now();
+            if (now - lastSeekTimeRef.current >= 50) {
+              lastSeekTimeRef.current = now;
+              seek(time);
+            }
           } else {
             // Tooltip
             const rect = scrubRectRef.current ?? e.currentTarget.getBoundingClientRect();
@@ -411,12 +442,10 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
           seek(progress * (playerDurationRef.current || 0));
           scrubRectRef.current = null;
           isScrubbingRef.current = false;
-          setIsScrubbing(false);
         }}
         onPointerCancel={() => {
           scrubRectRef.current = null;
           isScrubbingRef.current = false;
-          setIsScrubbing(false);
         }}
         onMouseLeave={() => {
           if (seekerTooltipRef.current) seekerTooltipRef.current.style.display = 'none';
@@ -448,11 +477,11 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
               className="absolute inset-0 origin-left bg-emerald-500 pointer-events-none will-change-transform"
               style={{ transform: `scaleX(${initialProgress})` }}
             />
-            {/* Thumb — CSS transition during playback; pulse RAF drives dot scale/glow */}
+            {/* Thumb — left% positions it (auto-correct on resize); pulse RAF drives dot scale/glow */}
             <div
               ref={thumbRef}
-              className="absolute left-0 top-1/2 pointer-events-none will-change-transform"
-              style={{ transform: `translate3d(-${THUMB_HALF_PX}px, -50%, 0)`, visibility: 'hidden' }}
+              className="absolute top-1/2 pointer-events-none"
+              style={{ left: `${initialProgress * 100}%`, transform: 'translate(-50%, -50%)', visibility: 'hidden', willChange: 'left' }}
             >
               <div
                 ref={thumbDotRef}
@@ -473,8 +502,8 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
                 applyScrubPosition(progress, time);
                 seek(time);
               }}
-              onFocus={() => setIsScrubbing(true)}
-              onBlur={() => setIsScrubbing(false)}
+              onFocus={() => { isScrubbingRef.current = true; }}
+              onBlur={() => { isScrubbingRef.current = false; }}
               className="absolute inset-0 opacity-0 appearance-none"
               style={{ pointerEvents: 'none' }}
             />
