@@ -235,7 +235,12 @@ export function downloadTrack(
 
     proc.on('error', (err) => {
       signal.removeEventListener('abort', onAbort);
-      reject(new Error(`Failed to start yt-dlp: ${err.message}`));
+      const spawnErr = err as NodeJS.ErrnoException;
+      if (spawnErr.code === 'ENOENT') {
+        reject(new Error('yt-dlp not found — install with: brew install yt-dlp'));
+      } else {
+        reject(new Error(`Failed to start yt-dlp: ${err.message}`));
+      }
     });
   });
 }
@@ -306,7 +311,14 @@ export async function embedMetadata(filePath: string, meta: Metadata): Promise<s
         if (code !== 0) reject(new Error(`ffmpeg failed: ${errOut.slice(-300)}`));
         else resolve();
       });
-      proc.on('error', reject);
+      proc.on('error', (err) => {
+        const spawnErr = err as NodeJS.ErrnoException;
+        if (spawnErr.code === 'ENOENT') {
+          reject(new Error('ffmpeg not found — install with: brew install ffmpeg'));
+        } else {
+          reject(err);
+        }
+      });
     });
 
     fs.unlinkSync(filePath);

@@ -14,6 +14,7 @@ import {
   invalidateCustomVisualizerPresetCache,
   listCustomVisualizerPresets,
 } from './services/visualizer-presets';
+import { checkDependencies } from './services/downloader';
 import {
   discoverDevices,
   castTrack,
@@ -270,6 +271,10 @@ const rpc = createRPC<BeatdownBunLocalSchema, BeatdownBunRemoteSchema>({
       return { count };
     },
 
+    'deps:check': async () => {
+      return await checkDependencies();
+    },
+
     'dialog:confirm': async ({ message }) => {
       const { response } = await Utils.showMessageBox({
         type: 'question',
@@ -441,6 +446,10 @@ queue.on('download:removed', (id: string) => {
 // ── Load existing downloads ────────────────────────────────────────────────────
 
 queue.loadFromDisk();
+checkDependencies().then(({ ytdlp, ffmpeg }) => {
+  if (!ytdlp) logger.warn('yt-dlp not found — downloads will fail. Install with: brew install yt-dlp');
+  if (!ffmpeg) logger.warn('ffmpeg not found — metadata embedding will fail. Install with: brew install ffmpeg');
+});
 const savedAppSettings = appConfig.load()?.appSettings as { maxConcurrentDownloads?: number } | undefined;
 if (typeof savedAppSettings?.maxConcurrentDownloads === 'number') {
   queue.setConcurrency(savedAppSettings.maxConcurrentDownloads);

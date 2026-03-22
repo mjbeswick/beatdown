@@ -4,6 +4,7 @@ import { usePersistedState } from '../hooks/usePersistedState';
 import { useEffect, useState } from 'react';
 import { $theme, themeChanged } from '../stores/theme';
 import { $appSettings, setConfirmDeleteActions, patchAppSettings } from '../stores/appSettings';
+import { $depsStatus } from '../stores/deps';
 import type { AudioFormat, QualityPreset } from '../../../shared/types';
 import type { BeatdownPaths } from '../../../shared/rpc-schema';
 import { rpc } from '../rpc';
@@ -87,6 +88,7 @@ const SETTINGS_CARD_CLASS = 'bg-zinc-800/50 border border-zinc-700/60 rounded-xl
 export default function SettingsView() {
   const theme = useUnit($theme);
   const appSettings = useUnit($appSettings);
+  const depsStatus = useUnit($depsStatus);
   const [format, setFormat] = usePersistedState<AudioFormat>('reel:format', 'm4a');
   const [quality, setQuality] = usePersistedState<QualityPreset>('reel:quality', 'auto');
   const visualizerSettings = useUnit($visualizerSettings);
@@ -528,14 +530,32 @@ export default function SettingsView() {
             <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500 mb-2">Dependencies</p>
           </div>
           <div className="px-4 pb-3 space-y-1 border-t border-zinc-700/40 pt-2.5">
-            <div className="flex items-center justify-between">
-              <span className="text-zinc-300 text-sm font-mono">yt-dlp</span>
-              <span className="text-zinc-500 text-xs">audio downloader</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-zinc-300 text-sm font-mono">ffmpeg</span>
-              <span className="text-zinc-500 text-xs">audio conversion</span>
-            </div>
+            {[
+              { key: 'ytdlp' as const, name: 'yt-dlp', desc: 'audio downloader', install: 'brew install yt-dlp' },
+              { key: 'ffmpeg' as const, name: 'ffmpeg', desc: 'audio conversion', install: 'brew install ffmpeg' },
+            ].map(({ key, name, desc, install }) => {
+              const found = depsStatus?.[key];
+              const checking = depsStatus === null;
+              return (
+                <div key={key} className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                        checking ? 'bg-zinc-600' : found ? 'bg-green-500' : 'bg-red-500'
+                      }`}
+                    />
+                    <span className="text-zinc-300 text-sm font-mono">{name}</span>
+                  </div>
+                  {checking ? (
+                    <span className="text-zinc-600 text-xs">checking…</span>
+                  ) : found ? (
+                    <span className="text-zinc-500 text-xs">{desc}</span>
+                  ) : (
+                    <span className="text-red-400 text-xs font-mono">{install}</span>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
 

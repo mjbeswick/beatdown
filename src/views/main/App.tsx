@@ -19,6 +19,7 @@ import CloseConfirmModal from './components/CloseConfirmModal';
 import { $nav } from './stores/nav';
 import { loadAllFx } from './stores/downloads';
 import { loadSettingsFx } from './stores/settingsLoader';
+import { checkDepsFx } from './stores/deps';
 import { $player, togglePlay, next, prev, seek, setVolume } from './stores/player';
 import { $theme } from './stores/theme';
 import { usePersistedState } from './hooks/usePersistedState';
@@ -58,6 +59,7 @@ export default function App() {
   useEffect(() => {
     loadSettingsFx();
     loadAllFx();
+    checkDepsFx();
   }, []);
 
   useEffect(() => {

@@ -214,7 +214,7 @@ function readYtDlpJson(url: string): Promise<Record<string, unknown>> {
     proc.on('error', (err) => {
       const spawnError = err as NodeJS.ErrnoException;
       if (spawnError.code === 'ENOENT') {
-        reject(new Error('yt-dlp is required to load YouTube Music playlists'));
+        reject(new Error('yt-dlp not found — install with: brew install yt-dlp'));
         return;
       }
       reject(new Error(`Failed to start yt-dlp: ${err.message}`));

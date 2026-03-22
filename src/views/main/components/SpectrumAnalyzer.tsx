@@ -24,7 +24,6 @@ function SpectrumAnalyzer({ style }: SpectrumAnalyzerProps) {
             ? {
                 mode: 10,
                 barSpace: 0,
-                gradient: 'emerald' as const,
                 mirror: 0 as const,
                 fillAlpha: 0.38,
                 lineWidth: 1,
@@ -33,7 +32,6 @@ function SpectrumAnalyzer({ style }: SpectrumAnalyzerProps) {
             : {
                 mode: 3,
                 barSpace: 0.1,
-                gradient: 'rainbow' as const,
                 mirror: 0 as const,
               };
 
@@ -87,12 +85,13 @@ function SpectrumAnalyzer({ style }: SpectrumAnalyzerProps) {
 
         });
 
-        // Register custom emerald gradient — matches the seek bar color
+        // Register custom emerald gradient before applying it — must happen
+        // after construction but before setting gradient on the instance.
         analyzer.registerGradient('emerald', {
           bgColor: '#000',
           colorStops: ['#6ee7b7', '#10b981'],
         });
-
+        analyzer.gradient = 'emerald';
 
         // Connect AudioMotion to the audio engine's analyser node
         try {

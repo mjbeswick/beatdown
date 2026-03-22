@@ -74,6 +74,7 @@ export interface BeatdownRPCSchema {
       'cast:seek': { params: { deviceId: string; seconds: number }; response: void };
       'settings:load': { params: undefined; response: RawSettings };
       'settings:save': { params: { key: SettingsKey; value: unknown }; response: void };
+      'deps:check': { params: undefined; response: { ytdlp: boolean; ffmpeg: boolean } };
       'dialog:confirm': { params: { message: string }; response: boolean };
     };
     messages: {

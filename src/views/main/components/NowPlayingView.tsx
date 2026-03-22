@@ -468,7 +468,7 @@ export default function NowPlayingView({
   );
 
   const mainContent = (
-    <div className="relative flex h-full min-h-0 min-w-0 overflow-y-auto overflow-x-hidden">
+    <div className="relative flex h-full min-h-0 min-w-0 overflow-hidden">
       <div
         className="absolute z-20"
         style={{
@@ -564,9 +564,9 @@ export default function NowPlayingView({
         </div>
       </div>
 
-      <div className="flex min-h-full w-full flex-col">
+      <div className="flex h-full min-h-0 w-full flex-col">
         <div
-          className="flex flex-1 w-full flex-col items-center justify-center"
+          className="flex flex-1 min-h-0 w-full flex-col items-center justify-center"
           style={{
             gap: 'clamp(1.1rem, 2.6vmin, 2rem)',
             paddingInline: 'clamp(1rem, 4vmin, 3.25rem)',
@@ -576,7 +576,7 @@ export default function NowPlayingView({
         >
         <div
           className="aspect-square rounded-2xl overflow-hidden shadow-2xl shadow-black/60"
-          style={{ width: 'clamp(15rem, 46vmin, 34rem)' }}
+          style={{ width: 'min(clamp(12rem, 42vmin, 32rem), 42vh)' }}
           onContextMenu={openAlbumArtMenu}
           title="Right-click for track actions"
         >
