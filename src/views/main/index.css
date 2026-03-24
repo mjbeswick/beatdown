@@ -31,6 +31,10 @@
   box-sizing: border-box;
 }
 
+html {
+  overflow: hidden;
+}
+
 body {
   margin: 0;
   padding: 0;
@@ -150,14 +154,16 @@ input[type="range"]::-webkit-slider-thumb {
   background: linear-gradient(to right, #10b981 var(--progress, 0%), #3f3f46 var(--progress, 0%));
 }
 .volume-slider::-webkit-slider-runnable-track {
-  background: transparent;
+  background: linear-gradient(to right, #10b981 var(--progress, 0%), #3f3f46 var(--progress, 0%));
 }
 .light-theme input[type="range"]::-webkit-slider-runnable-track {
   background: #d4d4d8;
 }
-.light-theme .seeker::-webkit-slider-runnable-track,
-.light-theme .volume-slider::-webkit-slider-runnable-track {
+.light-theme .seeker::-webkit-slider-runnable-track {
   background: transparent;
+}
+.light-theme .volume-slider::-webkit-slider-runnable-track {
+  background: linear-gradient(to right, #047857 var(--progress, 0%), #d4d4d8 var(--progress, 0%));
 }
 
 /* Select element */

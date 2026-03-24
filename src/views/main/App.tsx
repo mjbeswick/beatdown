@@ -25,6 +25,7 @@ import { $theme } from './stores/theme';
 import { usePersistedState } from './hooks/usePersistedState';
 import './audio/engine'; // initialize audio engine
 import './audio/djEngine'; // initialize DJ crossfade/beatmatch engine
+import { setPlaybackRate, getPlaybackRate } from './audio/engine';
 
 type NowPlayingSidebarTab = 'queue' | 'lyrics';
 
@@ -99,6 +100,14 @@ export default function App() {
           break;
         case 'KeyM':
           setVolume(volume > 0 ? 0 : 0.8);
+          break;
+        case 'ArrowUp':
+          e.preventDefault();
+          setPlaybackRate(Math.round((getPlaybackRate() + 0.1) * 10) / 10);
+          break;
+        case 'ArrowDown':
+          e.preventDefault();
+          setPlaybackRate(Math.round((getPlaybackRate() - 0.1) * 10) / 10);
           break;
       }
     };

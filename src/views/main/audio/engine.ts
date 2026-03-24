@@ -175,6 +175,18 @@ export function isCrossfadeInProgress(): boolean {
   return crossfadeInProgress;
 }
 
+let playbackRate = 1.0;
+
+export function setPlaybackRate(rate: number): void {
+  playbackRate = Math.max(0.25, Math.min(4.0, rate));
+  deckA.playbackRate = playbackRate;
+  deckB.playbackRate = playbackRate;
+}
+
+export function getPlaybackRate(): number {
+  return playbackRate;
+}
+
 /**
  * DJ engine can register a hook that is called whenever engine.ts would
  * normally do an immediate track reload.  If the hook returns true the reload

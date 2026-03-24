@@ -143,13 +143,13 @@ export default function WaveformSeeker({ className = 'w-full min-w-0' }: Props) 
 
     switch (event.key) {
       case 'ArrowLeft':
-      case 'ArrowDown':
         event.preventDefault();
+        event.stopPropagation();
         seekToTime(player.currentTime - step);
         break;
       case 'ArrowRight':
-      case 'ArrowUp':
         event.preventDefault();
+        event.stopPropagation();
         seekToTime(player.currentTime + step);
         break;
       case 'Home':

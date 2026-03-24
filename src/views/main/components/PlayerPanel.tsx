@@ -38,7 +38,7 @@ import {
 } from '../stores/appSettings';
 import { rpc } from '../rpc';
 import WaveformSeeker from './WaveformSeeker';
-import { getActiveDeck, getAnalyserNode } from '../audio/engine';
+import { getActiveDeck, getAnalyserNode, setPlaybackRate, getPlaybackRate } from '../audio/engine';
 import { detectBpm, getCachedBpm, type DetectedBeat } from '../audio/bpmDetector';
 
 // Height of the controls row content (buttons + time display), excluding padding
@@ -375,14 +375,6 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
   const initialProgress = player.duration > 0 ? Math.max(0, Math.min(player.currentTime / player.duration, 1)) : 0;
   const normalizedVolume = Math.max(0, Math.min(player.volume, 1));
   const volumeProgressPct = normalizedVolume * 100;
-  const volumeTrackProgressPct = Math.max(
-    0,
-    Math.min(
-      100,
-      ((VOLUME_SLIDER_THUMB_SIZE / 2 + normalizedVolume * (VOLUME_SLIDER_WIDTH - VOLUME_SLIDER_THUMB_SIZE)) /
-        VOLUME_SLIDER_WIDTH) * 100,
-    ),
-  );
 
   const seekerRowHeight = isWaveformSeeker
     ? waveformHeight + WAVEFORM_SEEKER_TOP_PADDING
@@ -450,12 +442,33 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
         onMouseLeave={() => {
           if (seekerTooltipRef.current) seekerTooltipRef.current.style.display = 'none';
         }}
+        onWheel={(e) => {
+          e.preventDefault();
+          const step = 5;
+          const duration = playerDurationRef.current || 0;
+          const next = e.deltaY > 0
+            ? Math.min(duration, player.currentTime + step)
+            : Math.max(0, player.currentTime - step);
+          seek(next);
+        }}
       >
         <div
           ref={seekerTooltipRef}
           className="absolute bottom-full mb-1.5 -translate-x-1/2 bg-zinc-800 border border-zinc-700/80 text-zinc-200 text-[10px] font-mono px-1.5 py-0.5 rounded shadow-lg pointer-events-none z-50 whitespace-nowrap"
           style={{ display: 'none' }}
         />
+
+        {isWaveformSeeker && (
+          <div className="absolute inset-x-0 top-0 flex items-center justify-center gap-2 overflow-hidden pointer-events-none px-3" style={{ height: WAVEFORM_SEEKER_TOP_PADDING }}>
+            <span className="text-zinc-600 text-[9px] leading-none whitespace-nowrap">Space</span>
+            <span className="text-zinc-800 text-[9px] leading-none">·</span>
+            <span className="text-zinc-600 text-[9px] leading-none whitespace-nowrap">←→ sentence</span>
+            <span className="text-zinc-800 text-[9px] leading-none">·</span>
+            <span className="text-zinc-600 text-[9px] leading-none whitespace-nowrap">↑↓ speed</span>
+            <span className="text-zinc-800 text-[9px] leading-none">·</span>
+            <span className="text-zinc-600 text-[9px] leading-none whitespace-nowrap">scroll</span>
+          </div>
+        )}
 
         {isWaveformSeeker ? (
           <div
@@ -637,11 +650,6 @@ export default function PlayerPanel({ onLyricsToggle, lyricsOpen }: Props) {
             className={`relative shrink-0 ${cast.isCasting ? 'opacity-40' : ''}`}
             style={{ width: `${VOLUME_SLIDER_WIDTH}px`, height: `${VOLUME_SLIDER_THUMB_SIZE}px` }}
           >
-            <div className="absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-zinc-700 pointer-events-none" />
-            <div
-              className="absolute left-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-emerald-500 pointer-events-none"
-              style={{ width: `${volumeTrackProgressPct}%` }}
-            />
             <input
               type="range"
               min={0}
